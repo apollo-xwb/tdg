@@ -2,7 +2,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { JewelleryConfig, UserState, OrderStatus, JewelleryType, StoneType, StoneCategory } from '../types';
-import { BASE_PRICE, LAB_DIAMOND_PRICE_FACTOR, NATURAL_DIAMOND_BASE, MOISSANITE_BASE, GEMSTONE_BASE, METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, EXCHANGE_RATES, JEWELLERY_TYPES, RING_SIZE_STANDARDS, GIA_LOGO, EGI_LOGO, LOGO_URL, BUDGET_OPTIONS, GEMSTONE_TYPES, TIMELINE_OPTIONS, JEWELLERY_GUIDE_TYPES, DONTPAYRETAIL } from '../constants';
+import { BASE_PRICE, LAB_DIAMOND_PRICE_FACTOR, NATURAL_DIAMOND_BASE, MOISSANITE_BASE, GEMSTONE_BASE, METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, EXCHANGE_RATES, JEWELLERY_TYPES, GIA_LOGO, EGI_LOGO, LOGO_URL, BUDGET_OPTIONS, BUDGET_NOT_SURE, GEMSTONE_TYPES, TIMELINE_OPTIONS, JEWELLERY_GUIDE_TYPES, DONTPAYRETAIL } from '../constants';
+import { RING_SYSTEMS, findRowByDiameter, findRowBySystemAndSize, getSizesForSystem } from '../ringSizeData';
+import RingSizeTable from './RingSizeTable';
+import RingSizeVisualizer from './RingSizeVisualizer';
+import RingWeightInfo from './RingWeightInfo';
+import CustomSelect from './CustomSelect';
 import { Download, Save, Info, ChevronRight, ChevronLeft, Ruler, AlertCircle, Eye, User, Mail, Shield, CheckCircle, Send, Clock, BadgeCheck, Wand2, HelpCircle, MessageSquare, CreditCard, Upload } from 'lucide-react';
 
 interface Props {
@@ -10,38 +15,6 @@ interface Props {
   onSave: (d: JewelleryConfig) => void;
   onUpdateDraft: (d: Partial<JewelleryConfig>) => void;
 }
-
-// UK/SA Ring Sizes - Internal Diameter in mm (accurate measurements from conversion chart)
-// Based on official ring size conversion standards
-const SIZE_TO_MM: Record<string, number> = {
-  'A': 11.95,      // A (1/2) - from chart
-  'B': 12.37,      // B (1) - from chart
-  'C': 12.78,      // C (1 1/2) - from chart
-  'D': 13.21,      // D (2) - from chart
-  'E': 13.61,      // E (2 1/2) - from chart
-  'F': 14.05,      // F (3) - from chart
-  'G': 14.48,      // Interpolated between F and H
-  'H': 14.88,      // Interpolated
-  'I': 15.04,      // I (4 1/4) - from chart
-  'J': 15.37,      // Interpolated between I and K
-  'K': 15.70,      // Interpolated (J 1/2 is 15.70)
-  'L': 16.10,      // Interpolated
-  'M': 16.51,      // M (6) - from chart
-  'N': 16.93,      // Interpolated
-  'O': 17.35,      // O (7) - from chart
-  'P': 17.77,      // Interpolated
-  'Q': 18.19,      // Q (8) - from chart
-  'R': 18.80,      // Interpolated
-  'S': 19.41,      // S 3/4 (9 1/2) - from chart (closest to S)
-  'T': 19.80,      // Interpolated
-  'U': 20.20,      // U 1/2 (10 1/2) - from chart (closest to U)
-  'V': 20.64,      // Interpolated
-  'W': 21.08,      // W 3/4 (11 1/2) - from chart (closest to W)
-  'X': 21.28,      // Interpolated
-  'Y': 21.49,      // Y (12) - from chart
-  'Z': 22.00       // Interpolated (Z+1 is 22.33)
-};
-const RING_SIZES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
 
 const MAIN_METALS = ['Platinum', '18K Gold', '14K Gold', 'White Gold', 'Rose Gold', 'Sterling Silver', 'Other'] as const;
 
@@ -111,9 +84,9 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
     const cur = steps[step];
     if (cur === 'Design Inspiration') return true;
     if (cur === 'Jewellery Type') return !!config.type && (config.type !== 'Ring' || !!config.typeOtherDetail);
-    if (cur === 'Budget') return (config.budget || 0) > 0;
+    if (cur === 'Budget') return (config.budget || 0) > 0 || config.budget === BUDGET_NOT_SURE;
     if (cur === 'Metal') return !!config.metal;
-    if (cur === 'Stones') return !!config.stoneCategory && (config.stoneCategory === 'Diamond' || config.stoneCategory === 'None' || config.stoneCategory === 'Moissanite' || GEMSTONE_TYPES.includes(config.stoneCategory));
+    if (cur === 'Stones') return !!config.stoneCategory && (config.stoneCategory === 'None' || config.stoneCategory === 'Moissanite' || GEMSTONE_TYPES.includes(config.stoneCategory) || (config.stoneCategory === 'Diamond' && (config.stoneType === 'Lab' || config.stoneType === 'Natural')));
     if (cur === 'Shape') return !!config.shape;
     if (cur === 'Setting') return !!config.settingStyle;
     if (cur === 'Quality Tier') return !!config.qualityTier;
@@ -121,7 +94,7 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
     if (cur === 'Ring Size') return true;
     if (cur === 'Contact') return !!(config.fullName || (config.firstName && config.lastName)) && !!config.email;
     if (cur === 'Loose: Origin') return !!config.stoneType && (config.stoneType === 'Natural' || config.stoneType === 'Lab');
-    if (cur === 'Loose: Budget') return (config.budget || 0) > 0;
+    if (cur === 'Loose: Budget') return (config.budget || 0) > 0 || config.budget === BUDGET_NOT_SURE;
     if (cur === 'Loose: Shape') return !!config.shape;
     if (cur === 'Loose: Quality') return !!config.qualityTier;
     return true;
@@ -188,12 +161,13 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
     const c = { ...cfg };
     const isRing = ['Engagement Ring', 'Wedding Band', 'Ring'].includes(c.type!);
     if (c.type === 'Loose Stone') {
-      if (!c.carat && (c.budget || 0) > 0 && c.qualityTier && c.shape) {
+      if (!c.carat && (c.budget || 0) > 0 && c.budget !== BUDGET_NOT_SURE && c.qualityTier && c.shape) {
         const stoneBase = NATURAL_DIAMOND_BASE * (c.stoneType === 'Lab' ? LAB_DIAMOND_PRICE_FACTOR : 1);
         const sf = SHAPE_DATA[c.shape]?.factor || 1;
         const qf = QUALITY_TIERS[c.qualityTier]?.factor || 1;
         c.carat = Math.max(0.1, Math.min(10, Math.pow((c.budget! / (stoneBase * sf * qf)), 1 / 1.95)));
       }
+      if (!c.carat || c.carat <= 0) c.carat = 1;
       return c;
     }
     if (!c.qualityTier) c.qualityTier = 'Balance Size & Quality';
@@ -206,13 +180,16 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
       const base = BASE_PRICE; const mp = c.metal ? METAL_DATA[c.metal]?.price || 0 : 0;
       const sp = c.settingStyle ? SETTING_DATA[c.settingStyle]?.price || 0 : 0;
       const qf = QUALITY_TIERS[qt]?.factor || 1;
-      const priceBeforeQuality = ((c.budget || 0) - (c.engraving ? 950 : 0)) / qf;
-      const stonePrice = priceBeforeQuality - base - mp - sp;
-      if (stonePrice > 0 && c.stoneCategory && c.stoneCategory !== 'None') {
-        const stoneBase = c.stoneCategory === 'Diamond' ? NATURAL_DIAMOND_BASE : (c.stoneCategory === 'Moissanite' ? MOISSANITE_BASE : GEMSTONE_BASE);
-        const adj = c.stoneType === 'Lab' ? stoneBase * LAB_DIAMOND_PRICE_FACTOR : stoneBase;
-        const sFac = SHAPE_DATA[c.shape!]?.factor || 1;
-        c.carat = Math.max(0.1, Math.min(10, Math.pow(stonePrice / (adj * sFac), 1 / 1.95)));
+      const canUseBudget = (c.budget || 0) > 0 && c.budget !== BUDGET_NOT_SURE;
+      if (canUseBudget) {
+        const priceBeforeQuality = ((c.budget || 0) - (c.engraving ? 950 : 0)) / qf;
+        const stonePrice = priceBeforeQuality - base - mp - sp;
+        if (stonePrice > 0 && c.stoneCategory && c.stoneCategory !== 'None') {
+          const stoneBase = c.stoneCategory === 'Diamond' ? NATURAL_DIAMOND_BASE : (c.stoneCategory === 'Moissanite' ? MOISSANITE_BASE : GEMSTONE_BASE);
+          const adj = c.stoneType === 'Lab' ? stoneBase * LAB_DIAMOND_PRICE_FACTOR : stoneBase;
+          const sFac = SHAPE_DATA[c.shape!]?.factor || 1;
+          c.carat = Math.max(0.1, Math.min(10, Math.pow(stonePrice / (adj * sFac), 1 / 1.95)));
+        } else c.carat = 1;
       } else c.carat = 1;
     }
     return c;
@@ -253,7 +230,7 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12 flex flex-col items-center animate-fadeIn">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col items-center animate-fadeIn overflow-x-hidden">
       <div className="w-full max-w-4xl mb-12">
         <h1 className="text-2xl lg:text-3xl font-thin tracking-tighter text-center uppercase mb-2">Bespoke Configurator</h1>
         <p className="text-[9px] uppercase tracking-widest text-center opacity-50 mb-12">{DONTPAYRETAIL} — You&apos;re not paying retail.</p>
@@ -266,9 +243,9 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
         </div>
       </div>
 
-      <div className="w-full max-w-6xl grid lg:grid-cols-2 gap-12 lg:gap-20">
-        <div className="min-h-[450px]">
-          {renderStep(steps[step], config, setConfig, step, steps.length, setStep, { currency: userState.currency, steps, hasInspiration: !!(config.designInspirationUrl || config.pinterestLink) })}
+      <div className="w-full max-w-6xl min-w-0 grid lg:grid-cols-2 gap-8 lg:gap-20">
+        <div className="min-h-[320px] md:min-h-[450px] min-w-0">
+          {renderStep(steps[step], config, setConfig, step, steps.length, setStep, { currency: userState.currency, steps, hasInspiration: !!(config.designInspirationUrl || config.pinterestLink), theme: userState.theme })}
           <div className="mt-12 flex gap-6">
             <button onClick={() => setStep(s => s - 1)} disabled={step === 0} className="flex-1 py-5 border border-current/10 text-[10px] uppercase tracking-[0.4em] font-light disabled:opacity-20 hover:bg-current/5 transition-all"><ChevronLeft className="inline mr-2" size={16}/> Back</button>
             <button onClick={handleNext} disabled={!canProceed} className={`flex-1 py-5 text-[10px] uppercase tracking-[0.4em] font-bold transition-all ${canProceed ? 'bg-white text-black hover:bg-gray-200' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
@@ -276,17 +253,20 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
             </button>
           </div>
         </div>
-        <div className="p-8 lg:p-10 glass rounded-sm space-y-10 border border-current/10">
+        <div className="p-4 sm:p-6 lg:p-10 glass rounded-sm space-y-10 border border-current/10">
           <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4">Indicative Brief</h2>
           <div className="space-y-4">
             {Object.entries(config).map(([k, v]) => {
-              if (['id', 'status', 'isApproved', 'date', 'carat', 'ringSizeStandard', 'budget', 'isDiscreet', 'firstName', 'lastName', 'email', 'imageUrl', 'designInspirationUrl', 'certLink', 'videoLink', 'paymentLink', 'customNotes'].includes(k)) return null;
+              if (['id', 'status', 'isApproved', 'date', 'carat', 'ringSizeStandard', 'isDiscreet', 'firstName', 'lastName', 'email', 'imageUrl', 'designInspirationUrl', 'certLink', 'videoLink', 'paymentLink', 'customNotes', 'stoneType'].includes(k)) return null;
               if (k === 'ringSize' && !['Engagement Ring', 'Wedding Band', 'Ring'].includes(config.type!)) return null;
-              if (!v || v === 'N/A' || v === 'None') return null;
+              if (k !== 'budget' && (!v || v === 'N/A' || v === 'None')) return null;
+              if (k === 'budget' && (v == null || v === 0)) return null;
+              const _rate = EXCHANGE_RATES[userState.currency]?.rate || 1;
+              const display = (k === 'stoneCategory' && v === 'Diamond' && config.stoneType) ? `Diamond (${config.stoneType})` : (k === 'budget' && v === BUDGET_NOT_SURE) ? 'Not sure' : (k === 'budget' && typeof v === 'number' && v > 0) ? `${userState.currency} ${Math.round(Number(v) / _rate).toLocaleString()}` : (v as string);
               return (
                 <div key={k} className="flex justify-between items-center text-[10px] uppercase tracking-widest opacity-60">
                   <span className="capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>
-                  <span className="font-bold text-current">{v as string}</span>
+                  <span className="font-bold text-current">{display}</span>
                 </div>
               );
             })}
@@ -297,12 +277,13 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
   );
 };
 
-const renderStep = (name: string, config: any, setConfig: any, step: number, totalSteps: number, setStep: any, opts?: { currency?: string; steps?: string[]; hasInspiration?: boolean }) => {
+const renderStep = (name: string, config: any, setConfig: any, step: number, totalSteps: number, setStep: any, opts?: { currency?: string; steps?: string[]; hasInspiration?: boolean; theme?: 'dark' | 'light' }) => {
   const update = (updates: any) => setConfig((p: any) => ({ ...p, ...updates }));
   const currency = opts?.currency || 'ZAR';
   const rate = EXCHANGE_RATES[currency]?.rate || 1;
   const formatBudget = (zar: number) => `${currency} ${Math.round(zar / rate).toLocaleString()}`;
   const hasInspiration = opts?.hasInspiration;
+  const theme = opts?.theme || 'dark';
   const contactIdx = (opts?.steps || []).indexOf('Contact');
   const selectAndAdvance = (value: any, updateFn?: () => void) => {
     if (updateFn) updateFn();
@@ -310,7 +291,8 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
     if (step < totalSteps - 1) setTimeout(() => setStep(step + 1), 150);
   };
   const handleSkipToContact = () => {
-    const base: any = { metal: 'Platinum', stoneCategory: 'None', stoneType: 'N/A', shape: 'N/A', qualityTier: 'Balance Size & Quality', timeline: "I'm flexible", budget: config.budget || 25000 };
+    const budgetForSkip = (typeof config.budget === 'number' && config.budget > 0) ? config.budget : 25000;
+    const base: any = { metal: 'Platinum', stoneCategory: 'None', stoneType: 'N/A', shape: 'N/A', qualityTier: 'Balance Size & Quality', timeline: "I'm flexible", budget: config.budget === BUDGET_NOT_SURE ? BUDGET_NOT_SURE : budgetForSkip };
     if (['Engagement Ring', 'Wedding Band', 'Ring'].includes(config.type)) base.settingStyle = 'Solitaire';
     update(base);
     if (contactIdx >= 0) setStep(contactIdx);
@@ -372,6 +354,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
     }
     case 'Budget': {
       const isCustom = config.budget === 0 || ((config.budget || 0) > 0 && !BUDGET_OPTIONS.some(o => o.value === config.budget));
+      const isNotSure = config.budget === BUDGET_NOT_SURE;
       return (
         <div className="space-y-8 py-4">
           <p className="text-[11px] uppercase tracking-widest opacity-60">Your budget helps us tailor the materials and design to match your expectations.</p>
@@ -383,11 +366,15 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
               <button key={o.value} type="button" onClick={() => update({ budget: o.value })} className={`py-6 border transition-all uppercase tracking-widest text-[9px] ${config.budget === o.value ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>{formatBudget(o.value)}+</button>
             ))}
             <button type="button" onClick={() => update({ budget: 0 })} className={`py-6 border transition-all uppercase tracking-widest text-[9px] ${isCustom ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Custom budget</button>
+            <button type="button" onClick={() => update({ budget: BUDGET_NOT_SURE })} className={`py-6 border transition-all uppercase tracking-widest text-[9px] ${isNotSure ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>I&apos;m not sure</button>
           </div>
           {isCustom && (
             <div>
               <input type="number" value={isCustom ? (config.budget || '') : ''} onChange={e => update({ budget: parseInt(e.target.value) || 0 })} placeholder="Enter amount (ZAR)" className="w-full bg-transparent border-b border-current/20 py-4 text-xl font-thin focus:outline-none focus:border-current" />
             </div>
+          )}
+          {isNotSure && (
+            <p className="text-[9px] uppercase tracking-widest opacity-60">We&apos;ll quote based on your design choices — no obligation.</p>
           )}
         </div>
       );
@@ -412,7 +399,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
       const isRing = ['Engagement Ring', 'Wedding Band', 'Ring'].includes(config.type);
       return (
         <div className="space-y-8 py-4">
-          <p className="text-[11px] uppercase tracking-widest opacity-60">What type of stones would you like?</p>
+          <p className="text-[11px] uppercase tracking-widest opacity-60">What type of stones would you like? For diamonds, choose Lab, Natural, or Moissanite.</p>
           {hasInspiration && (
             <button type="button" onClick={handleSkipToContact} className="w-full py-3 border border-dashed border-current/30 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100">Skip to contact — we&apos;ll quote from your inspiration</button>
           )}
@@ -420,10 +407,9 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
             {(isBracelet || isRing) && (
               <button type="button" onClick={() => selectAndAdvance({ stoneCategory: 'None', stoneType: 'N/A', shape: 'N/A' })} className={`py-5 px-5 border transition-all uppercase tracking-widest text-[9px] ${config.stoneCategory === 'None' ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>No stones</button>
             )}
-            <button type="button" onClick={() => update({ stoneCategory: 'Diamond', stoneType: 'Lab' })} className={`py-5 px-5 border transition-all uppercase tracking-widest text-[9px] ${config.stoneCategory === 'Diamond' && config.stoneType === 'Lab' ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>{isBracelet ? 'Diamonds (Lab)' : 'Diamonds'}</button>
-            {isBracelet && (
-              <button type="button" onClick={() => selectAndAdvance({ stoneCategory: 'Moissanite', stoneType: 'Moissanite' })} className={`py-5 px-5 border transition-all uppercase tracking-widest text-[9px] ${config.stoneCategory === 'Moissanite' ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Moissanite</button>
-            )}
+            <button type="button" onClick={() => selectAndAdvance({ stoneCategory: 'Diamond', stoneType: 'Lab' })} className={`py-5 px-5 border transition-all uppercase tracking-widest text-[9px] ${config.stoneCategory === 'Diamond' && config.stoneType === 'Lab' ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Lab Diamond</button>
+            <button type="button" onClick={() => selectAndAdvance({ stoneCategory: 'Diamond', stoneType: 'Natural' })} className={`py-5 px-5 border transition-all uppercase tracking-widest text-[9px] ${config.stoneCategory === 'Diamond' && config.stoneType === 'Natural' ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Natural Diamond</button>
+            <button type="button" onClick={() => selectAndAdvance({ stoneCategory: 'Moissanite', stoneType: 'Moissanite' })} className={`py-5 px-5 border transition-all uppercase tracking-widest text-[9px] ${config.stoneCategory === 'Moissanite' ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Moissanite</button>
             <button type="button" onClick={() => update({ stoneType: 'N/A', stoneCategory: config.stoneCategory && GEMSTONE_TYPES.includes(config.stoneCategory) ? config.stoneCategory : undefined })} className={`py-5 px-5 border transition-all uppercase tracking-widest text-[9px] ${showGemstoneList ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Gemstones</button>
           </div>
           {showGemstoneList && (
@@ -463,7 +449,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
       );
     case 'Quality Tier': {
       const calcMain = (budget: number, qt: string) => {
-        if (!budget || !config.stoneCategory || config.stoneCategory === 'None') return null;
+        if (budget == null || budget <= 0 || budget === BUDGET_NOT_SURE || !config.stoneCategory || config.stoneCategory === 'None') return null;
         const base = BASE_PRICE;
         const mp = config.metal ? METAL_DATA[config.metal]?.price || 0 : 0;
         const sp = config.settingStyle ? SETTING_DATA[config.settingStyle]?.price || 0 : 0;
@@ -485,6 +471,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
             <button type="button" onClick={handleSkipToContact} className="w-full py-3 border border-dashed border-current/30 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100">Skip to contact — we&apos;ll quote from your inspiration</button>
           )}
           {config.budget > 0 && <p className="text-[9px] uppercase tracking-widest opacity-60 text-center">Options based on your budget of {formatBudget(config.budget || 0)}</p>}
+          {config.budget === BUDGET_NOT_SURE && <p className="text-[9px] uppercase tracking-widest opacity-60 text-center">Choose your quality preference — we&apos;ll quote based on your selection.</p>}
           <QualityOptions current={config.qualityTier} onSelect={(v: string) => { const c = calcMain(config.budget || 0, v); update({ qualityTier: v, carat: c || config.carat || 1 }); }} availableTiers={available.length ? available : undefined} budget={config.budget || 0} calculateCarat={(_b: number, qt: string) => calcMain(_b, qt)} />
         </div>
       );
@@ -513,35 +500,118 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
         </div>
       );
     case 'Ring Size': {
-      const mm = SIZE_TO_MM[config.ringSize || 'M'] || 16.51;
+      const std = config.ringSizeStandard || 'UK/SA';
+      let diameterMM = 17.35;
+      let row = findRowByDiameter(diameterMM);
+      if (std === 'mm') {
+        diameterMM = parseFloat(String(config.ringSize || '')) || 17.35;
+        row = findRowByDiameter(diameterMM);
+      } else {
+        const r = findRowBySystemAndSize(std, config.ringSize || '');
+        if (r) {
+          diameterMM = parseFloat(r.diameterMM);
+          row = r;
+        } else {
+          row = findRowByDiameter(diameterMM);
+        }
+      }
+      const circum = diameterMM * Math.PI;
+      const sysOptions = RING_SYSTEMS;
+      const sizeOptions = getSizesForSystem(std);
+
+      const onSystemChange = (k: string) => {
+        if (k === 'mm') {
+          update({ ringSizeStandard: 'mm', ringSize: diameterMM.toFixed(2) });
+          return;
+        }
+        const r = findRowByDiameter(diameterMM);
+        const col = RING_SYSTEMS.find(s => s.key === k)?.col;
+        const raw = r && col ? (r as any)[col] : null;
+        const v = (raw && raw !== '—' && raw !== '-') ? String(raw) : undefined;
+        update({ ringSizeStandard: k, ringSize: v });
+      };
+
+      const onSizeChange = (val: string) => {
+        if (!val) { update({ ringSize: undefined }); return; }
+        const r = findRowBySystemAndSize(std, val);
+        if (r) update({ ringSize: val, ringSizeStandard: std });
+      };
+
+      const onTableSelect = (r: { british?: string; us?: string; diameterMM: string }) => {
+        if (r.british && r.british !== '—') {
+          update({ ringSize: r.british, ringSizeStandard: 'UK/SA' });
+        } else if (r.us && r.us !== '—') {
+          update({ ringSize: r.us, ringSizeStandard: 'US/CA' });
+        } else {
+          update({ ringSize: r.diameterMM, ringSizeStandard: 'mm' });
+        }
+      };
+
       return (
-        <div className="space-y-8 py-4">
-          <p className="text-[11px] uppercase tracking-widest opacity-60">Find your ring size. The circle below is 1:1 real-life internal diameter—hold your finger against the screen to compare.</p>
+        <div className="space-y-6 md:space-y-8 py-4 max-h-[min(70vh,680px)] overflow-y-auto md:max-h-none md:overflow-visible min-w-0">
+          <p className="text-[11px] uppercase tracking-widest opacity-60">Convert ring sizes, see equivalents, and estimate band weight. Pick a system and size, or enter diameter. Click a row in the chart to select.</p>
           {hasInspiration && (
             <button type="button" onClick={handleSkipToContact} className="w-full py-3 border border-dashed border-current/30 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100">Skip to contact — we&apos;ll quote from your inspiration</button>
           )}
-          <div className="flex flex-col sm:flex-row items-center gap-10">
-            <div className="flex-shrink-0 rounded-full border-2 border-current/40 flex items-center justify-center bg-current/5" style={{ width: `${mm}mm`, height: `${mm}mm`, minWidth: 48, minHeight: 48 }} title={config.ringSize ? `UK/SA ${config.ringSize} — ${mm} mm` : 'Select a size'}>
-              <span className="text-[8px] opacity-50">{config.ringSize || '—'}</span>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+            <div className="space-y-4 min-w-0">
+              <h3 className="text-[10px] uppercase tracking-[0.3em] font-bold flex items-center gap-1.5">
+                Convert Ring Sizes
+                {config.ringSize && <CheckCircle className="text-green-500 shrink-0" size={14} aria-hidden />}
+              </h3>
+              <div>
+                <label className="text-[9px] uppercase tracking-widest opacity-60 block mb-1">System</label>
+                <CustomSelect options={sysOptions.map(s => ({ value: s.key, label: s.label }))} value={std} onChange={onSystemChange} theme={theme} />
+              </div>
+              {std !== 'mm' && (
+                <div>
+                  <label className="text-[9px] uppercase tracking-widest opacity-60 block mb-1">Size</label>
+                  <CustomSelect options={[{ value: '', label: 'Select later' }, ...sizeOptions]} value={config.ringSize || ''} onChange={onSizeChange} placeholder="Select later" theme={theme} />
+                </div>
+              )}
+              <div className="min-w-0">
+                <label className="text-[9px] uppercase tracking-widest opacity-60 block mb-1">Or Enter Diameter</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <input type="text" inputMode="decimal" value={diameterMM.toFixed(2)} onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) update({ ringSize: String(v), ringSizeStandard: 'mm' }); }} placeholder="MM" className="w-full min-w-0 bg-white/5 border border-current/20 p-3 text-[10px] focus:outline-none focus:border-current/40" />
+                    <span className="text-[8px] opacity-50">MM</span>
+                  </div>
+                  <div>
+                    <input type="text" inputMode="decimal" value={(diameterMM / 25.4).toFixed(3)} onChange={e => { const v = parseFloat(e.target.value) * 25.4; if (!isNaN(v)) update({ ringSize: String(v), ringSizeStandard: 'mm' }); }} placeholder="In" className="w-full min-w-0 bg-white/5 border border-current/20 p-3 text-[10px] focus:outline-none focus:border-current/40" />
+                    <span className="text-[8px] opacity-50">Inches</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex-1 space-y-4">
-              <label className="text-[9px] uppercase tracking-widest opacity-70 font-bold block">UK/SA size</label>
-              <select value={config.ringSize || ''} onChange={e => update({ ringSize: e.target.value || undefined })} className="w-full bg-white/5 border border-current/20 p-4 text-sm font-light focus:outline-none focus:border-current/40">
-                <option value="">Select later</option>
-                {RING_SIZES.map(s => (<option key={s} value={s}>{s}</option>))}
-              </select>
-              <div className="p-3 border border-current/10 bg-current/[0.02] space-y-2">
-                <p className="text-[9px] uppercase tracking-widest font-bold opacity-70">Tips</p>
-                <ul className="text-[8px] opacity-60 space-y-1 list-disc list-inside">
-                  <li>Measure when fingers are warm; cold shrinks them.</li>
-                  <li>Knuckles can be larger—ring must slide over comfortably.</li>
-                  <li>Wider bands often need a half-size up.</li>
-                  <li>Not sure? Choose &quot;Select later&quot; in the next step or contact us.</li>
-                </ul>
+
+            <div className="space-y-4 min-w-0">
+              <h3 className="text-[10px] uppercase tracking-[0.3em] font-bold">Size Equivalents</h3>
+              <RingSizeVisualizer diameterMM={diameterMM} circumferenceMM={circum} />
+              <div className="text-[10px] space-y-1">
+                <div className="flex justify-between"><span className="opacity-60">Inside Diameter</span><span>{diameterMM.toFixed(2)} mm / {(diameterMM / 25.4).toFixed(3)}&quot;</span></div>
+                <div className="flex justify-between"><span className="opacity-60">Circumference</span><span>{circum.toFixed(2)} mm / {(circum / 25.4).toFixed(2)}&quot;</span></div>
+                <div className="flex justify-between"><span className="opacity-60">British &amp; Australian</span><span>{row?.british || '—'}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">US &amp; Canada</span><span>{row?.us || '—'}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">French &amp; Russian</span><span>{row?.french || '—'}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">German</span><span>{row?.german || '—'}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">Japanese</span><span>{row?.japanese || '—'}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">Swiss</span><span>{row?.swiss || '—'}</span></div>
               </div>
             </div>
           </div>
-          <p className="text-[8px] opacity-40">{config.ringSize ? `Internal diameter: ${mm} mm (UK/SA ${config.ringSize}). Matches a real ring.` : 'Default M shown. Select a size to see your 1:1 fit.'}</p>
+
+          <RingSizeTable onSelectRow={onTableSelect} />
+
+          <RingWeightInfo circumferenceMM={circum} britishSize={row?.british || undefined} theme={theme} />
+
+          <div className="p-3 border border-current/10 bg-current/[0.02] space-y-2">
+            <p className="text-[9px] uppercase tracking-widest font-bold opacity-70">Tips</p>
+            <ul className="text-[8px] opacity-60 space-y-1 list-disc list-inside">
+              <li>Measure when fingers are warm; cold shrinks them. Knuckles can be larger—ring must slide over comfortably.</li>
+              <li>Wider bands often need a half-size up. Not sure? Choose &quot;Select later&quot; or contact us.</li>
+            </ul>
+          </div>
         </div>
       );
     }
@@ -567,6 +637,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
       );
     case 'Loose: Budget': {
       const isCustom = config.budget === 0 || ((config.budget || 0) > 0 && !BUDGET_OPTIONS.some(o => o.value === config.budget));
+      const isNotSure = config.budget === BUDGET_NOT_SURE;
       return (
         <div className="space-y-8 py-4">
           <p className="text-[11px] uppercase tracking-widest opacity-60">Your budget determines the carat and quality we can offer.</p>
@@ -575,9 +646,13 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
               <button key={o.value} type="button" onClick={() => update({ budget: o.value })} className={`py-6 border transition-all uppercase tracking-widest text-[9px] ${config.budget === o.value ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>{formatBudget(o.value)}+</button>
             ))}
             <button type="button" onClick={() => update({ budget: 0 })} className={`py-6 border transition-all uppercase tracking-widest text-[9px] ${isCustom ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Custom budget</button>
+            <button type="button" onClick={() => update({ budget: BUDGET_NOT_SURE })} className={`py-6 border transition-all uppercase tracking-widest text-[9px] ${isNotSure ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>I&apos;m not sure</button>
           </div>
           {isCustom && (
             <input type="number" value={isCustom ? (config.budget || '') : ''} onChange={e => update({ budget: parseInt(e.target.value) || 0 })} placeholder="Enter amount (ZAR)" className="w-full bg-transparent border-b border-current/20 py-4 text-xl font-thin focus:outline-none focus:border-current mt-4" />
+          )}
+          {isNotSure && (
+            <p className="text-[9px] uppercase tracking-widest opacity-60 mt-2">We&apos;ll quote based on your preferences — no obligation.</p>
           )}
         </div>
       );
@@ -591,7 +666,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
       );
     case 'Loose: Quality': {
       const calcLoose = (budget: number, qt: string) => {
-        if (!budget || !config.shape) return null;
+        if (budget == null || budget <= 0 || budget === BUDGET_NOT_SURE || !config.shape) return null;
         const sb = NATURAL_DIAMOND_BASE * (config.stoneType === 'Lab' ? LAB_DIAMOND_PRICE_FACTOR : 1);
         const sf = SHAPE_DATA[config.shape]?.factor || 1;
         const qf = QUALITY_TIERS[qt]?.factor || 1;
@@ -602,6 +677,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
       return (
         <div className="space-y-6 py-4">
           {config.budget > 0 && <p className="text-[9px] uppercase tracking-widest opacity-60 text-center">Options based on your budget of {formatBudget(config.budget || 0)}</p>}
+          {config.budget === BUDGET_NOT_SURE && <p className="text-[9px] uppercase tracking-widest opacity-60 text-center">Choose your quality — we&apos;ll quote based on your selection.</p>}
           <QualityOptions current={config.qualityTier} onSelect={(v: string) => { const c = calcLoose(config.budget || 0, v); update({ qualityTier: v, carat: c || config.carat || 1 }); }} availableTiers={available.length ? available : undefined} budget={config.budget || 0} calculateCarat={(_b: number, qt: string) => calcLoose(_b, qt)} />
         </div>
       );
@@ -616,16 +692,16 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
               <>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Type</span><span>Loose Diamond</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Origin</span><span>{config.stoneType}</span></div>
-                <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Budget</span><span>{formatBudget(config.budget||0)}</span></div>
+                <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Budget</span><span>{config.budget === BUDGET_NOT_SURE ? 'Not sure — we\'ll quote from your choices' : formatBudget(config.budget||0)}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Shape</span><span>{config.shape}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Quality</span><span>{config.qualityTier}</span></div>
               </>
             ) : (
               <>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Type</span><span>{config.type}{config.type === 'Ring' && config.typeOtherDetail ? ` (${config.typeOtherDetail})` : ''}</span></div>
-                <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Budget</span><span>{formatBudget(config.budget||0)}</span></div>
+                <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Budget</span><span>{config.budget === BUDGET_NOT_SURE ? 'Not sure — we\'ll quote from your choices' : formatBudget(config.budget||0)}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Metal</span><span>{config.metal}</span></div>
-                <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Stones</span><span>{config.stoneCategory}</span></div>
+                <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Stones</span><span>{config.stoneCategory === 'Diamond' ? `Diamond (${config.stoneType || 'Lab'})` : config.stoneCategory}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Timeline</span><span>{config.timeline}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Contact</span><span>{config.fullName || [config.firstName, config.lastName].filter(Boolean).join(' ')}, {config.email}</span></div>
               </>
@@ -825,7 +901,8 @@ const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, on
     setIsLoadingVariations(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const prompt = `Act as an expert jeweler. Generate 3 distinct alternative configurations within a ZAR ${config.budget} budget. Current config: ${JSON.stringify(config)}. Return ONLY a JSON array of objects with these keys: metal, stoneType, stoneCategory, shape, carat, settingStyle, qualityTier, priceZAR. Ensure stoneType is 'Natural', 'Lab', or 'Moissanite'. Do not mention AI.`;
+      const budgetZAR = (typeof config.budget === 'number' && config.budget > 0) ? config.budget : 50000;
+      const prompt = `Act as an expert jeweler. Generate 3 distinct alternative configurations within a ZAR ${budgetZAR} budget. Current config: ${JSON.stringify(config)}. Return ONLY a JSON array of objects with these keys: metal, stoneType, stoneCategory, shape, carat, settingStyle, qualityTier, priceZAR. Ensure stoneType is 'Natural', 'Lab', or 'Moissanite'. Do not mention AI.`;
       const res = await ai.models.generateContent({ model: 'gemini-3-pro-preview', contents: prompt, config: { responseMimeType: "application/json" } });
       const raw = JSON.parse(res.text?.trim() || '[]');
       const finalVariations = raw.map((v: any) => ({ ...config, ...v, id: `VAR-${Math.random().toString(36).substr(2, 5).toUpperCase()}`, date: new Date().toLocaleDateString() }));

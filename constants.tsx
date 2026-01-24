@@ -183,6 +183,9 @@ export const JEWELLERY_GUIDE_TYPES = [
   { id: 'other', label: 'Other', value: 'Other' }
 ];
 
+/** Sentinel for "I'm not sure" — we'll quote based on your choices. */
+export const BUDGET_NOT_SURE = -1;
+
 export const BUDGET_OPTIONS = [
   { label: 'R5,000+', value: 5000 },
   { label: 'R10,000+', value: 10000 },

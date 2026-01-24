@@ -8,7 +8,7 @@ import { OpeningHoursCountdown, OpeningHoursBlock, AddressBlock, PhoneBlock } fr
 const Footer: React.FC<{ theme: 'dark' | 'light', onNavigate: (v: AppView) => void }> = ({ theme, onNavigate }) => {
   const isDark = theme === 'dark';
   return (
-    <footer className={`py-16 px-6 lg:px-8 border-t transition-all ${isDark ? 'bg-black border-white/5 text-white' : 'bg-white border-black/5 text-black'}`}>
+    <footer className={`flex-shrink-0 py-16 px-4 sm:px-6 lg:px-8 border-t transition-all ${isDark ? 'bg-black border-white/5 text-white' : 'bg-white border-black/5 text-black'}`}>
       <div className="max-w-7xl mx-auto space-y-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-12">
           <div className="space-y-4">
