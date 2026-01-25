@@ -69,4 +69,4 @@ export interface UserState {
   builderDraft?: Partial<JewelleryConfig>;
 }
 
-export type AppView = 'Home' | 'RingBuilder' | 'Learn' | 'Chatbot' | 'Portal' | 'Resources' | 'JewelerPortal' | 'Terms';
+export type AppView = 'Home' | 'RingBuilder' | 'Learn' | 'Chatbot' | 'Portal' | 'Resources' | 'JewelerPortal' | 'Terms' | 'Blog';

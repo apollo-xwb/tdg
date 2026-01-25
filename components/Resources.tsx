@@ -1,34 +1,27 @@
 
 import React, { useState } from 'react';
-import { Download, FileText, Calendar, ShieldCheck, ArrowRight, CheckCircle } from 'lucide-react';
+import { Download, Calendar, ShieldCheck, ArrowRight } from 'lucide-react';
 import { LOGO_URL } from '../constants';
+
+import weddingPdfUrl from '../src/downloads/Wedding_Planner_Download_Instructions.pdf?url';
+import ringGuidePdfUrl from '../src/downloads/Engagement_Ring_Guide.pdf?url';
 
 const Resources: React.FC = () => {
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  const simulateDownload = async (title: string) => {
+  const handleDownload = (title: string) => {
     setDownloading(title);
-    
-    // Simple PDF Generation Simulator for the Wedding Guide
-    if (title.includes('Wedding')) {
-      const { jsPDF } = (window as any).jspdf;
-      const doc = new jsPDF('p', 'mm', 'a4');
-      doc.setFillColor(18, 18, 18);
-      doc.rect(0, 0, 210, 297, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(24);
-      doc.text("BESPOKE WEDDING PLANNING", 105, 100, { align: 'center' });
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text("A MASTER CLASS IN MODERN CEREMONY", 105, 110, { align: 'center' });
-      doc.text("© THE DIAMOND GUY PRECIOUS METALS", 105, 280, { align: 'center' });
-      doc.save("TDG-Wedding-Planning-Preview.pdf");
-    }
-
-    setTimeout(() => {
-      setDownloading(null);
-    }, 2000);
+    const isWedding = title.includes('Wedding');
+    const url = isWedding ? weddingPdfUrl : ringGuidePdfUrl;
+    const filename = isWedding ? 'Wedding_Planner_Download_Instructions.pdf' : 'Engagement_Ring_Guide.pdf';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => setDownloading(null), 800);
   };
 
   return (
@@ -44,19 +37,19 @@ const Resources: React.FC = () => {
       <div className="grid lg:grid-cols-2 gap-12 lg:gap-20">
         <ResourceCard 
           title="The Bespoke Wedding Planning Template"
-          desc="A comprehensive master-spreadsheet for the modern couple. From venue logistics to guest-list management, structured by industry experts."
+          desc="A comprehensive master template for the modern couple. From venue logistics to guest-list management, structured by industry experts."
           icon={<Calendar size={48} strokeWidth={0.5} />}
           isDownloading={downloading === 'Wedding'}
-          onDownload={() => simulateDownload('Wedding')}
-          tags={["Interactive", "XLSX", "v2.0"]}
+          onDownload={() => handleDownload('Wedding')}
+          tags={["Planning", "PDF", "Download"]}
         />
         <ResourceCard 
           title="The Ultimate Ring Buying Dossier"
           desc="Confidential market insights on diamond pricing, stone selection secrets, and a checklist for ensuring the perfect fit and quality."
           icon={<ShieldCheck size={48} strokeWidth={0.5} />}
           isDownloading={downloading === 'Ring'}
-          onDownload={() => simulateDownload('Ring')}
-          tags={["Educational", "PDF", "24 Pages"]}
+          onDownload={() => handleDownload('Ring')}
+          tags={["Educational", "PDF", "Ring Guide"]}
         />
       </div>
 

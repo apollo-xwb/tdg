@@ -117,8 +117,18 @@ const Learn: React.FC<{ onNavigate?: (v: any) => void, theme?: 'dark' | 'light' 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {Object.entries(METAL_DATA).map(([name, data]) => (
               <div key={name} className="glass p-8 border border-current/10 rounded-sm space-y-6 group overflow-hidden hover:border-current/30 transition-all">
-                <div className="aspect-video overflow-hidden rounded-sm mb-4">
-                  <img src={data.img} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-105" alt={name} />
+                <div 
+                  className="aspect-video rounded-sm mb-4 overflow-hidden flex items-center justify-center ring-1 ring-black/5 ring-inset"
+                  style={{ 
+                    background: data.gradient, 
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.08)' 
+                  }}
+                >
+                  <div 
+                    className="w-[85%] h-6 rounded-full border border-white/30"
+                    style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.4)' }}
+                    aria-hidden
+                  />
                 </div>
                 <h4 className="text-[12px] uppercase tracking-[0.4em] font-bold">{name}</h4>
                 <p className="text-xs opacity-60 font-light leading-relaxed">{data.insight}</p>

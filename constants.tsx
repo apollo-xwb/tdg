@@ -233,6 +233,7 @@ export const NAV_ITEMS = [
   { id: 'Home', label: 'Home' },
   { id: 'RingBuilder', label: 'Builder' },
   { id: 'Learn', label: 'Learn' },
+  { id: 'Blog', label: 'Blog' },
   { id: 'Resources', label: 'Guides' },
   { id: 'Chatbot', label: 'Concierge' },
   { id: 'Portal', label: 'Vault' }

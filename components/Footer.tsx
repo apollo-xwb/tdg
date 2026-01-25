@@ -58,6 +58,7 @@ const Footer: React.FC<{ theme: 'dark' | 'light', onNavigate: (v: AppView) => vo
         <div className="pt-8 border-t border-current/10 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="opacity-40 text-[9px] uppercase tracking-[0.4em]">© 2026 THE DIAMOND GUY PRECIOUS METALS</p>
           <div className="flex flex-wrap gap-6 justify-center">
+            <button onClick={() => onNavigate('Blog')} className="text-[9px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-all">Blog</button>
             <button onClick={() => onNavigate('Terms')} className="text-[9px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-all">Terms & Conditions</button>
             <button onClick={() => onNavigate('Resources')} className="text-[9px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-all">Security & Trust</button>
             <button onClick={() => onNavigate('Chatbot')} className="text-[9px] uppercase tracking-widest opacity-40 hover:opacity-100 transition-all">Contact</button>
