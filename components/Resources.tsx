@@ -3,8 +3,8 @@ import React, { useState } from 'react';
 import { Download, Calendar, ShieldCheck, ArrowRight } from 'lucide-react';
 import { LOGO_URL } from '../constants';
 
-import weddingPdfUrl from '../src/downloads/Wedding_Planner_Download_Instructions.pdf?url';
-import ringGuidePdfUrl from '../src/downloads/Engagement_Ring_Guide.pdf?url';
+import weddingPdfUrl from '../src/Downloads/Wedding_Planner_Download_Instructions.pdf?url';
+import ringGuidePdfUrl from '../src/Downloads/Engagement_Ring_Guide.pdf?url';
 
 const Resources: React.FC = () => {
   const [downloading, setDownloading] = useState<string | null>(null);
