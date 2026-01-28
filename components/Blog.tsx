@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   BLOG_ARTICLES,
   BLOG_CATEGORIES,
-  getArticleBySlug,
   type BlogArticle,
   type BlogCategory,
   type BodyBlock
@@ -38,8 +37,40 @@ export default function Blog({ theme, onNavigateTo }: BlogProps) {
   const isDark = theme === 'dark';
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<BlogCategory | 'All'>('All');
+  const [jewelerArticles, setJewelerArticles] = useState<BlogArticle[]>([]);
 
-  const article = slug ? getArticleBySlug(slug) : null;
+  useEffect(() => {
+    let cancelled = false;
+    import('../lib/supabase')
+      .then((m) => {
+        if (cancelled) return;
+        const jid = m.getJewelerEmail();
+        if (!jid) return;
+        return m.fetchPublishedBlogPosts(jid);
+      })
+      .then((posts) => {
+        if (cancelled || !Array.isArray(posts)) return;
+        const asArticles: BlogArticle[] = posts
+          .filter((p) => p.publishedAt)
+          .map((p) => ({
+            slug: p.slug,
+            title: p.title,
+            metaDescription: p.metaDescription,
+            category: (p.category as BlogCategory) || 'Guide',
+            publishedAt: p.publishedAt!,
+            readTimeMinutes: p.readTimeMinutes ?? 5,
+            excerpt: p.excerpt,
+            body: (p.body || []) as BodyBlock[],
+          }));
+        setJewelerArticles(asArticles);
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, []);
+
+  const allArticles = useMemo(() => [...jewelerArticles, ...BLOG_ARTICLES], [jewelerArticles]);
+  const article = slug ? allArticles.find((a) => a.slug === slug) ?? null;
 
   // ——— SEO: document title and meta ———
   useEffect(() => {
@@ -64,7 +95,7 @@ export default function Blog({ theme, onNavigateTo }: BlogProps) {
   }, [article, slug]);
 
   const filtered = useMemo(() => {
-    let list = BLOG_ARTICLES;
+    let list = allArticles;
     if (categoryFilter !== 'All')
       list = list.filter(a => a.category === categoryFilter);
     if (search.trim()) {
@@ -77,7 +108,7 @@ export default function Blog({ theme, onNavigateTo }: BlogProps) {
       );
     }
     return list;
-  }, [categoryFilter, search]);
+  }, [allArticles, categoryFilter, search]);
 
   // ——— Article view ———
   if (article) {
@@ -96,7 +127,7 @@ export default function Blog({ theme, onNavigateTo }: BlogProps) {
     return (
       <div className="max-w-xl mx-auto px-6 py-16 text-center">
         <h2 className="text-2xl font-medium tracking-tight mb-4">Article not found</h2>
-        <p className="opacity-60 mb-8">The page you’re looking for doesn’t exist or has been moved.</p>
+        <p className="opacity-78 mb-8">The page you’re looking for doesn’t exist or has been moved.</p>
         <button
           onClick={() => navigate('/blog')}
           className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest opacity-70 hover:opacity-100 transition-opacity"
@@ -110,9 +141,9 @@ export default function Blog({ theme, onNavigateTo }: BlogProps) {
   return (
     <div className="max-w-6xl mx-auto px-6 lg:px-8 py-12 lg:py-16 animate-fadeIn">
       <header className="text-center space-y-6 mb-14">
-        <p className="text-[10px] uppercase tracking-[0.5em] opacity-40">Expert Guides & Tools</p>
+        <p className="text-[10px] uppercase tracking-[0.5em] opacity-68">Expert Guides & Tools</p>
         <h1 className="text-4xl lg:text-6xl font-thin tracking-tighter uppercase">The Diamond Guy Blog</h1>
-        <p className="max-w-xl mx-auto opacity-50 font-light leading-relaxed text-sm">
+        <p className="max-w-xl mx-auto opacity-75 font-light leading-relaxed text-sm">
           SEO-focused guides on engagement rings, diamonds, metals, and buying—with practical tools and tips to help you choose with confidence.
         </p>
       </header>
@@ -180,7 +211,7 @@ export default function Blog({ theme, onNavigateTo }: BlogProps) {
               <h2 className="text-lg lg:text-xl font-medium tracking-tight group-hover:opacity-80 transition-opacity line-clamp-2">
                 {a.title}
               </h2>
-              <p className="text-sm opacity-60 line-clamp-2">{a.excerpt}</p>
+              <p className="text-sm opacity-78 line-clamp-2">{a.excerpt}</p>
               <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest opacity-50 group-hover:opacity-100 transition-opacity">
                 Read more <ChevronRight className="w-3 h-3" />
               </span>
@@ -190,7 +221,7 @@ export default function Blog({ theme, onNavigateTo }: BlogProps) {
       </div>
 
       {filtered.length === 0 && (
-        <p className="text-center py-16 opacity-50">No articles match your filters. Try a different search or category.</p>
+        <p className="text-center py-16 opacity-72">No articles match your filters. Try a different search or category.</p>
       )}
     </div>
   );
@@ -262,7 +293,7 @@ function ArticleView({
           <time dateTime={article.publishedAt}>{new Date(article.publishedAt).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}</time>
         </div>
         <h1 className="text-3xl lg:text-4xl font-medium tracking-tight">{article.title}</h1>
-        <p className="text-lg opacity-60">{article.excerpt}</p>
+        <p className="text-lg opacity-78">{article.excerpt}</p>
       </header>
 
       <div className="prose-custom space-y-6">
@@ -272,7 +303,7 @@ function ArticleView({
       </div>
 
       <footer className="mt-16 pt-10 border-t border-current/10">
-        <p className="text-[10px] uppercase tracking-widest opacity-40 mb-6">Ready to design yours?</p>
+        <p className="text-[10px] uppercase tracking-widest opacity-68 mb-6">Ready to design yours?</p>
         <div className="flex flex-wrap gap-4">
           <button
             onClick={() => onNavigateTo('RingBuilder')}

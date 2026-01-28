@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Lighter secondary/paragraph text for readability (tester feedback) */
+@layer utilities {
+  .text-secondary { opacity: 0.78; }
+  .text-muted { opacity: 0.68; }
+}

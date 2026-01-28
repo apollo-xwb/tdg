@@ -10,6 +10,8 @@ export type Timeline = 'As soon as possible' | 'Within 1 month' | 'Within 3 mont
 
 export type OrderStatus = 'Quoted' | 'Approved' | 'Deposit Paid' | 'Sourcing Stone' | 'In Production' | 'Final Polish' | 'Ready' | 'Collected';
 
+export type LeadStatus = 'New' | 'Contacted' | 'Quoted' | 'Won' | 'Lost' | 'Closed';
+
 export interface Lead {
   id: string;
   name: string;
@@ -18,8 +20,30 @@ export interface Lead {
   requestType: string;
   description: string;
   date: string;
-  status: 'New' | 'Contacted' | 'Closed';
+  status: LeadStatus;
   nudgedByClient?: boolean;
+  catalogProductId?: string;
+  source?: 'Chatbot' | 'Partner Nudge' | 'Ring Builder' | 'Collection Enquiry' | 'Manual';
+  linkedDesignId?: string;
+}
+
+/** Jeweler inventory item shown in client Collection; clients can enquire on it */
+export interface CatalogProduct {
+  id: string;
+  jewelerId: string;
+  title: string;
+  description: string;
+  imageUrls: string[];
+  priceZAR: number;
+  metal?: Metal;
+  type?: JewelleryType;
+  shape?: Shape;
+  carat?: number;
+  stoneCategory?: StoneCategory;
+  settingStyle?: SettingStyle;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface JewelleryConfig {
@@ -58,6 +82,8 @@ export interface JewelleryConfig {
   gender?: 'Men' | 'Women';
   bandWidth?: number;
   imageUrl?: string;
+  /** When true, client should be notified (e.g. email) when status changes. Jeweler-facing preference. */
+  notifyClientOnStatusChange?: boolean;
 }
 
 export interface UserState {
@@ -69,4 +95,118 @@ export interface UserState {
   builderDraft?: Partial<JewelleryConfig>;
 }
 
-export type AppView = 'Home' | 'RingBuilder' | 'Learn' | 'Chatbot' | 'Portal' | 'Resources' | 'JewelerPortal' | 'Terms' | 'Blog';
+export type EmailFlowTriggerType = 'quote_approved' | 'status_update' | 'reminder' | 'promo' | 'custom';
+
+export interface EmailFlowFollowUp {
+  delay_days: number;
+  subject_template: string;
+  body_template: string;
+}
+
+export interface EmailFlow {
+  id: string;
+  jewelerId: string;
+  name: string;
+  triggerType: EmailFlowTriggerType;
+  subjectTemplate: string;
+  bodyTemplate: string;
+  followUpDays?: number | null;
+  isActive: boolean;
+  followUps: EmailFlowFollowUp[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AppView = 'Home' | 'RingBuilder' | 'Learn' | 'Chatbot' | 'Portal' | 'Resources' | 'JewelerPortal' | 'Terms' | 'Blog' | 'Collection' | 'Track' | 'Book';
+
+/** Jeweler plan tier; Growth and Pro include Live Diamond Sourcing (Nivoda). */
+export type JewelerPackageTier = 'starter' | 'growth' | 'pro';
+
+/** One day's operational hours. open/close in 24h (e.g. 9, 17); null = closed. */
+export interface OpeningHoursEntry {
+  day: number;
+  name: string;
+  open: number | null;
+  close: number | null;
+}
+
+export interface JewelerSettings {
+  jewelerId: string;
+  packageTier: JewelerPackageTier;
+  /** When true, Nivoda integration is used for stone sourcing (paywalled to growth/pro). */
+  nivodaSourcingEnabled?: boolean;
+  /** Operational hours shown in footer and used for booking when no custom availability is set. */
+  openingHours?: OpeningHoursEntry[];
+  /** Site-wide logo URL. Used in navbar, footer, quotes, watermarks, etc. Leave empty to use default. */
+  logoUrl?: string | null;
+  updatedAt: string;
+}
+
+/** Recurring weekly availability slot. dayOfWeek 0 = Sunday, 6 = Saturday. */
+export interface JewelerAvailabilitySlot {
+  id: string;
+  jewelerId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  updatedAt: string;
+}
+
+export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+
+export interface Appointment {
+  id: string;
+  jewelerId: string;
+  startAt: string;
+  endAt: string;
+  clientName: string;
+  clientEmail: string;
+  summary: string;
+  status: AppointmentStatus;
+  designId?: string | null;
+  leadId?: string | null;
+  createdAt: string;
+}
+
+/** Item in the Guides / Digital Vault shown to clients (Resources page). Jeweler can add/edit/remove. */
+export interface VaultGuide {
+  id: string;
+  jewelerId: string;
+  title: string;
+  description: string;
+  /** URL to the asset (PDF, etc.). Client downloads from this. */
+  downloadUrl: string;
+  /** Suggested filename when downloading (e.g. "Wedding_Planner.pdf"). */
+  suggestedFilename?: string;
+  tags: string[];
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Body block for blog posts – aligned with data/blogArticles.ts BodyBlock. */
+export type BlogBodyBlock =
+  | { type: 'p'; content: string }
+  | { type: 'h2'; content: string }
+  | { type: 'h3'; content: string }
+  | { type: 'ul'; items: string[] }
+  | { type: 'ol'; items: string[] }
+  | { type: 'cta'; to: 'RingBuilder' | 'Chatbot' | 'Resources'; label: string };
+
+/** Blog post written by jeweler. Slug must be unique. publishedAt null = draft. */
+export interface BlogPost {
+  id: string;
+  jewelerId: string;
+  slug: string;
+  title: string;
+  metaDescription: string;
+  category: string;
+  /** ISO date or null if draft */
+  publishedAt: string | null;
+  readTimeMinutes: number;
+  excerpt: string;
+  body: BlogBodyBlock[];
+  createdAt: string;
+  updatedAt: string;
+}

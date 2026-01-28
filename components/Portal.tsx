@@ -1,8 +1,11 @@
 
 import React, { useState } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { UserState, AppView, OrderStatus, JewelleryConfig } from '../types';
 import { EXCHANGE_RATES } from '../constants';
-import { Heart, Box, MessageSquare, Diamond, FileText, Video, CreditCard, ChevronDown, ChevronUp, Download, Share2, Eye, Edit3, Send, Shield } from 'lucide-react';
+import { Heart, Box, MessageSquare, FileText, Video, CreditCard, ChevronDown, ChevronUp, Download, Share2, Edit3, Send, Lock } from 'lucide-react';
+
+const ORDER_STATUS_FLOW: OrderStatus[] = ['Quoted', 'Approved', 'Deposit Paid', 'Sourcing Stone', 'In Production', 'Final Polish', 'Ready', 'Collected'];
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   'Quoted': '#888888', 'Approved': '#3B82F6', 'Deposit Paid': '#F59E0B', 'Sourcing Stone': '#A855F7',
@@ -14,10 +17,27 @@ interface PortalProps {
   setView: (view: AppView) => void;
   onNudge: (id: string) => void;
   onEditDesign: (design: JewelleryConfig) => void;
+  hasAuth?: boolean;
+  sessionUser?: User | null;
 }
 
-const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesign }) => {
+const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesign, hasAuth = false, sessionUser = null }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (hasAuth && !sessionUser) {
+    return (
+      <div className="max-w-2xl mx-auto px-8 py-24 text-center animate-fadeIn">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 border-current/20 mb-8">
+          <Lock size={28} className="opacity-60" />
+        </div>
+        <h2 className="text-3xl font-thin tracking-tighter uppercase mb-4">Sign in to view your Vault</h2>
+        <p className="text-[10px] uppercase tracking-widest opacity-68 mb-10">Your saved proposals and crafting status are stored securely. Sign in to continue.</p>
+        <button onClick={() => setView('Chatbot')} className="px-8 py-4 bg-white text-black text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200">
+          Go to Concierge to sign in
+        </button>
+      </div>
+    );
+  }
 
   const handleShare = async (design: JewelleryConfig) => {
     const text = `Take a look at this bespoke ${design.type} from The Diamond Guy. Ref: ${design.id}`;
@@ -33,7 +53,7 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
     <div className="max-w-6xl mx-auto px-8 py-12 space-y-24 animate-fadeIn">
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10 border-b border-current/10 pb-20">
         <div className="space-y-4">
-           <p className="text-[11px] uppercase tracking-[0.5em] opacity-40">Secured Client Vault</p>
+           <p className="text-[11px] uppercase tracking-[0.5em] opacity-68">Secured Client Vault</p>
            <h1 className="text-7xl font-thin tracking-tighter uppercase">Your Profile</h1>
         </div>
         <div className="flex items-center gap-16">
@@ -44,10 +64,10 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
 
       <section className="grid lg:grid-cols-3 gap-24">
         <div className="lg:col-span-2 space-y-16">
-          <h2 className="text-[11px] uppercase tracking-[0.6em] opacity-60 flex items-center gap-4 border-b border-white/5 pb-8 font-bold"><Heart size={16} /> Saved Proposals</h2>
+          <h2 className="text-[11px] uppercase tracking-[0.6em] opacity-78 flex items-center gap-4 border-b border-white/5 pb-8 font-bold"><Heart size={16} /> Saved Proposals</h2>
           <div className="space-y-10">
             {userState.recentDesigns.length === 0 && (
-              <p className="text-center py-20 opacity-30 uppercase tracking-widest text-[10px]">No designs saved in your vault yet.</p>
+              <p className="text-center py-20 opacity-55 uppercase tracking-widest text-[10px]">No designs saved in your vault yet.</p>
             )}
             {userState.recentDesigns.map((design) => {
               const isExp = expandedId === design.id;
@@ -58,10 +78,13 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
                     <div className="flex gap-12 items-center">
                        <img src={design.imageUrl || 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=100'} className="w-20 h-20 object-cover rounded-sm border border-white/5 shadow-lg" />
                        <div>
-                          <h4 className="text-[13px] uppercase tracking-[0.4em] font-bold flex items-center gap-4">
+                          <h4 className="text-[13px] uppercase tracking-[0.4em] font-bold flex items-center gap-4 flex-wrap">
                             {design.id} <span className="text-[8px] px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: STATUS_COLORS[design.status] }}>{design.status}</span>
+                            {design.isApproved && design.paymentLink && (
+                              <span className="text-[8px] px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-400 border border-emerald-500/50">Approved — pay deposit</span>
+                            )}
                           </h4>
-                          <p className="text-[10px] opacity-40 tracking-widest mt-1 uppercase">{design.type} • {design.metal || 'Loose Gem'}</p>
+                          <p className="text-[10px] opacity-65 tracking-widest mt-1 uppercase">{design.type} • {design.metal || 'Loose Gem'}</p>
                        </div>
                     </div>
                     <div className="flex items-center gap-8">
@@ -75,29 +98,42 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
                     <div className="px-10 pb-10 space-y-10 animate-fadeIn border-t border-white/5 pt-10">
                       <div className="grid md:grid-cols-2 gap-10">
                         <div className="space-y-4">
-                           <h5 className="text-[10px] uppercase opacity-40 font-bold mb-4">Master Specs</h5>
+                           <h5 className="text-[10px] uppercase opacity-68 font-bold mb-4">Order timeline</h5>
+                           <div className="space-y-2 mb-6">
+                             {ORDER_STATUS_FLOW.map((s, i) => {
+                               const idx = ORDER_STATUS_FLOW.indexOf(design.status);
+                               const completed = idx >= 0 && i <= idx;
+                               return (
+                                 <div key={s} className={`flex items-center gap-3 text-[10px] uppercase tracking-widest ${completed ? 'opacity-100 font-medium' : 'opacity-40'}`}>
+                                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${completed ? 'bg-emerald-500' : 'bg-current/30'}`} />
+                                   {s}
+                                 </div>
+                               );
+                             })}
+                           </div>
+                           <h5 className="text-[10px] uppercase opacity-68 font-bold mb-4">Master Specs</h5>
                            <Row label="Stone Type" val={design.stoneType} />
                            <Row label="Shape" val={design.shape || 'N/A'} />
                            <Row label="Metal" val={design.metal || 'N/A'} />
                            <Row label="Quality" val={design.qualityTier} />
                            {(design.videoLink || design.certLink || design.paymentLink) && (
                              <div className="mt-6 pt-6 border-t border-white/5 space-y-3">
-                               <h5 className="text-[10px] uppercase opacity-40 font-bold mb-4">Links & Resources</h5>
+                               <h5 className="text-[10px] uppercase opacity-68 font-bold mb-4">Links & Resources</h5>
                                {design.videoLink && (
-                                 <a href={design.videoLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-[10px] uppercase tracking-widest hover:opacity-100 opacity-60 transition-opacity">
+                                 <a href={design.videoLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-[10px] uppercase tracking-widest hover:opacity-100 opacity-78 transition-opacity">
                                    <Video size={14}/> View Video
                                  </a>
                                )}
                                {design.certLink && (
-                                 <a href={design.certLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-[10px] uppercase tracking-widest hover:opacity-100 opacity-60 transition-opacity">
+                                 <a href={design.certLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-[10px] uppercase tracking-widest hover:opacity-100 opacity-78 transition-opacity">
                                    <FileText size={14}/> View Certificate
                                  </a>
                                )}
-                               {design.paymentLink && (
-                                 <a href={design.paymentLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-emerald-400 hover:text-emerald-300 font-bold">
-                                   <CreditCard size={14}/> Pay 50% Deposit
-                                 </a>
-                               )}
+                              {design.paymentLink && (
+                                <a href={design.paymentLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-emerald-400 hover:text-emerald-300 font-bold mt-2 p-3 rounded border border-emerald-500/30 bg-emerald-500/10">
+                                  <CreditCard size={14}/> Pay 50% Deposit — Your proposal has been approved
+                                </a>
+                              )}
                              </div>
                            )}
                         </div>
@@ -116,7 +152,7 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
           </div>
         </div>
         <div className="space-y-16">
-           <h2 className="text-[11px] uppercase tracking-[0.6em] opacity-60 flex items-center gap-4 border-b border-current/5 pb-8 font-bold"><Box size={16} /> Live Crafting</h2>
+           <h2 className="text-[11px] uppercase tracking-[0.6em] opacity-78 flex items-center gap-4 border-b border-current/5 pb-8 font-bold"><Box size={16} /> Live Crafting</h2>
            {!userState.recentDesigns.length && <p className="opacity-20 text-[10px] uppercase tracking-widest italic text-center py-20">No active crafting projects.</p>}
            {userState.recentDesigns.find(d => d.isApproved) && <Active design={userState.recentDesigns.find(d => d.isApproved)!} setView={setView} />}
         </div>
@@ -127,14 +163,14 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
 
 const Row = ({ label, val }: any) => (
   <div className="flex justify-between items-center py-2 border-b border-white/5 text-[10px] uppercase tracking-widest">
-    <span className="opacity-40 font-medium">{label}</span>
+    <span className="opacity-68 font-medium">{label}</span>
     <span className="font-bold">{val}</span>
   </div>
 );
 
 const Btn = ({ icon, label, onClick }: any) => (
   <button onClick={onClick} className="flex flex-col items-center justify-center p-6 border border-white/5 hover:bg-white/5 transition-all text-center gap-2">
-    {icon} <span className="text-[8px] uppercase tracking-widest font-bold opacity-60">{label}</span>
+    {icon} <span className="text-[8px] uppercase tracking-widest font-bold opacity-75">{label}</span>
   </button>
 );
 
@@ -158,7 +194,7 @@ const Active = ({ design, setView }: any) => (
 
 const Stat = ({ label, val }: any) => (
   <div className="text-right">
-    <p className="text-[10px] uppercase tracking-[0.4em] opacity-40 mb-2 font-bold">{label}</p>
+    <p className="text-[10px] uppercase tracking-[0.4em] opacity-68 mb-2 font-bold">{label}</p>
     <h5 className="text-5xl font-thin tracking-tighter">{val}</h5>
   </div>
 );

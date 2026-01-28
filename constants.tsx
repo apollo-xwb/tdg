@@ -233,8 +233,11 @@ export const NAV_ITEMS = [
   { id: 'Home', label: 'Home' },
   { id: 'RingBuilder', label: 'Builder' },
   { id: 'Learn', label: 'Learn' },
+  { id: 'Collection', label: 'Collection' },
   { id: 'Blog', label: 'Blog' },
   { id: 'Resources', label: 'Guides' },
   { id: 'Chatbot', label: 'Concierge' },
-  { id: 'Portal', label: 'Vault' }
+  { id: 'Portal', label: 'Vault' },
+  { id: 'Track', label: 'Track' },
+  { id: 'Book', label: 'Book a visit' }
 ];

@@ -131,10 +131,10 @@ const Learn: React.FC<{ onNavigate?: (v: any) => void, theme?: 'dark' | 'light' 
                   />
                 </div>
                 <h4 className="text-[12px] uppercase tracking-[0.4em] font-bold">{name}</h4>
-                <p className="text-xs opacity-60 font-light leading-relaxed">{data.insight}</p>
+                <p className="text-xs opacity-78 font-light leading-relaxed">{data.insight}</p>
                 <div className="pt-4 border-t border-current/5 flex items-center gap-2">
                    <ShieldCheck size={14} className="text-emerald-500" />
-                   <span className="text-[9px] uppercase tracking-widest opacity-40">Certified High-Purity</span>
+                   <span className="text-[9px] uppercase tracking-widest opacity-68">Certified High-Purity</span>
                 </div>
               </div>
             ))}
@@ -151,7 +151,7 @@ const Learn: React.FC<{ onNavigate?: (v: any) => void, theme?: 'dark' | 'light' 
           <div className="grid md:grid-cols-2 gap-12 lg:gap-16 items-center">
             <div className="space-y-8">
               <h3 className="text-lg font-light uppercase tracking-widest">Identical Brilliance</h3>
-              <p className="opacity-50 text-sm leading-relaxed font-light">
+              <p className="opacity-75 text-sm leading-relaxed font-light">
                 Lab diamonds are identical to natural diamonds in every physical, chemical, and optical way. They are created in controlled environments mimicking Earth's natural conditions. Choosing lab allows for larger stones and higher quality tiers within the same investment budget.
               </p>
               <div className="flex gap-4 lg:gap-6">
@@ -227,7 +227,7 @@ const Learn: React.FC<{ onNavigate?: (v: any) => void, theme?: 'dark' | 'light' 
               </button>
               {openFaq === i && (
                 <div className="px-8 lg:px-10 pb-8 lg:pb-10 animate-fadeIn">
-                  <p className="text-xs opacity-50 font-light leading-relaxed max-w-3xl">{item.a}</p>
+                  <p className="text-xs opacity-75 font-light leading-relaxed max-w-3xl">{item.a}</p>
                 </div>
               )}
             </div>
@@ -241,7 +241,7 @@ const Learn: React.FC<{ onNavigate?: (v: any) => void, theme?: 'dark' | 'light' 
 const EducationBlock = ({ title, content }: any) => (
   <div className="space-y-4 border-l-2 border-current/10 pl-8 lg:pl-10 py-4 hover:border-current transition-all">
     <h4 className="text-[10px] lg:text-[11px] uppercase tracking-[0.5em] font-bold">{title}</h4>
-    <p className="text-xs opacity-40 leading-relaxed font-light">{content}</p>
+    <p className="text-xs opacity-72 leading-relaxed font-light">{content}</p>
   </div>
 );
 
@@ -249,14 +249,14 @@ const ProcessStep = ({ num, title, text }: any) => (
   <div className="glass p-10 lg:p-12 space-y-6 rounded-sm border border-current/10 hover:border-current/30 transition-all">
     <span className="text-3xl lg:text-4xl font-thin opacity-10">{num}</span>
     <h4 className="text-[9px] lg:text-[10px] uppercase tracking-widest font-bold">{title}</h4>
-    <p className="text-[9px] lg:text-[10px] opacity-40 leading-relaxed font-light">{text}</p>
+    <p className="text-[9px] lg:text-[10px] opacity-72 leading-relaxed font-light">{text}</p>
   </div>
 );
 
 const StatBox = ({ val, label }: any) => (
   <div className="text-center p-6 lg:p-8 border border-current/10 bg-current/[0.02] flex-1">
     <span className="block text-xl lg:text-2xl font-thin mb-1">{val}</span>
-    <span className="text-[8px] lg:text-[9px] uppercase tracking-widest opacity-40">{label}</span>
+    <span className="text-[8px] lg:text-[9px] uppercase tracking-widest opacity-68">{label}</span>
   </div>
 );
 
@@ -267,7 +267,7 @@ const GuidePreviewCard = ({ title, subtitle, onClick }: any) => (
   >
      <div className="w-12 h-1 bg-current/10 group-hover:bg-current transition-colors"></div>
      <h4 className="text-[10px] uppercase tracking-[0.4em] font-bold">{title}</h4>
-     <p className="text-[9px] uppercase tracking-widest opacity-40">{subtitle}</p>
+     <p className="text-[9px] uppercase tracking-widest opacity-68">{subtitle}</p>
   </button>
 );
 

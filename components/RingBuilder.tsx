@@ -1,24 +1,31 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { JewelleryConfig, UserState, OrderStatus, JewelleryType, StoneType, StoneCategory } from '../types';
+import AuthGate from './AuthGate';
 import { BASE_PRICE, LAB_DIAMOND_PRICE_FACTOR, NATURAL_DIAMOND_BASE, MOISSANITE_BASE, GEMSTONE_BASE, METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, EXCHANGE_RATES, JEWELLERY_TYPES, GIA_LOGO, EGI_LOGO, LOGO_URL, BUDGET_OPTIONS, BUDGET_NOT_SURE, GEMSTONE_TYPES, TIMELINE_OPTIONS, JEWELLERY_GUIDE_TYPES, DONTPAYRETAIL } from '../constants';
 import { RING_SYSTEMS, findRowByDiameter, findRowBySystemAndSize, getSizesForSystem } from '../ringSizeData';
 import RingSizeTable from './RingSizeTable';
 import RingSizeVisualizer from './RingSizeVisualizer';
 import RingWeightInfo from './RingWeightInfo';
 import CustomSelect from './CustomSelect';
-import { Download, Save, Info, ChevronRight, ChevronLeft, Ruler, AlertCircle, Eye, User, Mail, Shield, CheckCircle, Send, Clock, BadgeCheck, Wand2, HelpCircle, MessageSquare, CreditCard, Upload } from 'lucide-react';
+import { Download, Save, Info, ChevronRight, ChevronLeft, Ruler, AlertCircle, Eye, User, Mail, Shield, CheckCircle, Send, Clock, BadgeCheck, Wand2, HelpCircle, MessageSquare, CreditCard, Upload, RotateCcw } from 'lucide-react';
 
 interface Props {
   userState: UserState;
   onSave: (d: JewelleryConfig) => void;
   onUpdateDraft: (d: Partial<JewelleryConfig>) => void;
+  sessionUser?: SupabaseUser | null;
+  hasAuth?: boolean;
+  /** Site logo URL for quotes, PDFs, watermarks. Defaults to LOGO_URL when omitted. */
+  logoUrl?: string;
 }
 
 const MAIN_METALS = ['Platinum', '18K Gold', '14K Gold', 'White Gold', 'Rose Gold', 'Sterling Silver', 'Other'] as const;
 
-const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
+const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft, sessionUser = null, hasAuth = false, logoUrl }) => {
+  const logoSrc = logoUrl ?? LOGO_URL;
   const [config, setConfig] = useState<Partial<JewelleryConfig>>(() => ({
     id: `TDG-${Math.random().toString(36).substr(2, 7).toUpperCase()}`,
     status: 'Quoted',
@@ -36,6 +43,23 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
   const [complete, setComplete] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const handleStartFromScratch = () => {
+    setConfig({
+      id: `TDG-${Math.random().toString(36).substr(2, 7).toUpperCase()}`,
+      status: 'Quoted',
+      isApproved: false,
+      date: new Date().toLocaleDateString(),
+      carat: 1.0,
+      ringSizeStandard: 'UK/SA',
+      ringSize: 'M',
+      budget: 0,
+      isDiscreet: false,
+    });
+    setStep(0);
+    setComplete(false);
+    onUpdateDraft({});
+  };
 
   useEffect(() => {
     const draft: Partial<JewelleryConfig> = {
@@ -79,6 +103,20 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
     s.push('Contact', 'Review');
     return s;
   }, [config.type, config.stoneCategory]);
+
+  // When arriving on Contact step with an authenticated user, prefill from account
+  const contactStepIndex = steps.indexOf('Contact');
+  useEffect(() => {
+    if (contactStepIndex < 0 || step !== contactStepIndex || !sessionUser) return;
+    const email = sessionUser.email ?? '';
+    const name = [sessionUser.user_metadata?.full_name, sessionUser.user_metadata?.name].find(Boolean) as string | undefined;
+    if (!email) return;
+    setConfig(prev => {
+      if (prev.email === email && (prev.fullName || prev.firstName)) return prev;
+      const full = name || prev.fullName || [prev.firstName, prev.lastName].filter(Boolean).join(' ') || '';
+      return { ...prev, email, fullName: full || prev.fullName };
+    });
+  }, [step, contactStepIndex, sessionUser?.id, sessionUser?.email, sessionUser?.user_metadata?.full_name, sessionUser?.user_metadata?.name]);
 
   const canProceed = useMemo(() => {
     const cur = steps[step];
@@ -226,6 +264,8 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
       onUpdateConfig={setConfig}
       onRegenerateImage={generateImg}
       onApprove={(d) => { onSave({...d, status: 'Approved'} as JewelleryConfig); setSavedSuccess(true); setTimeout(() => setSavedSuccess(false), 3000); }}
+      onStartOver={handleStartFromScratch}
+      logoUrl={logoSrc}
     />
   );
 
@@ -233,10 +273,20 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col items-center animate-fadeIn overflow-x-hidden">
       <div className="w-full max-w-4xl mb-12">
         <h1 className="text-2xl lg:text-3xl font-thin tracking-tighter text-center uppercase mb-2">Bespoke Configurator</h1>
-        <p className="text-[9px] uppercase tracking-widest text-center opacity-50 mb-12">{DONTPAYRETAIL} — You&apos;re not paying retail.</p>
+        <p className="text-[9px] uppercase tracking-widest text-center opacity-72 mb-12">{DONTPAYRETAIL} — You&apos;re not paying retail.</p>
         <div className="flex justify-between items-center mb-6">
           <h4 className="text-[10px] lg:text-[12px] uppercase tracking-[0.6em] font-light text-current">{steps[step]}</h4>
-          <span className="text-[10px] opacity-40 uppercase tracking-widest">{step + 1} / {steps.length}</span>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={handleStartFromScratch}
+              className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity"
+              title="Start from scratch"
+            >
+              <RotateCcw size={12} /> Start over
+            </button>
+            <span className="text-[10px] opacity-68 uppercase tracking-widest">{step + 1} / {steps.length}</span>
+          </div>
         </div>
         <div className="w-full h-[1px] bg-current/10">
           <div className="h-full bg-current transition-all duration-700" style={{ width: `${((step + 1) / steps.length) * 100}%` }}></div>
@@ -245,7 +295,11 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
 
       <div className="w-full max-w-6xl min-w-0 grid lg:grid-cols-2 gap-8 lg:gap-20">
         <div className="min-h-[320px] md:min-h-[450px] min-w-0">
-          {renderStep(steps[step], config, setConfig, step, steps.length, setStep, { currency: userState.currency, steps, hasInspiration: !!(config.designInspirationUrl || config.pinterestLink), theme: userState.theme })}
+          {steps[step] === 'Contact' && hasAuth && !sessionUser ? (
+            <AuthGate theme={userState.theme} onSuccess={() => {}} />
+          ) : (
+            renderStep(steps[step], config, setConfig, step, steps.length, setStep, { currency: userState.currency, steps, hasInspiration: !!(config.designInspirationUrl || config.pinterestLink), theme: userState.theme })
+          )}
           <div className="mt-12 flex gap-6">
             <button onClick={() => setStep(s => s - 1)} disabled={step === 0} className="flex-1 py-5 border border-current/10 text-[10px] uppercase tracking-[0.4em] font-light disabled:opacity-20 hover:bg-current/5 transition-all"><ChevronLeft className="inline mr-2" size={16}/> Back</button>
             <button onClick={handleNext} disabled={!canProceed} className={`flex-1 py-5 text-[10px] uppercase tracking-[0.4em] font-bold transition-all ${canProceed ? 'bg-white text-black hover:bg-gray-200' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
@@ -264,7 +318,7 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft }) => {
               const _rate = EXCHANGE_RATES[userState.currency]?.rate || 1;
               const display = (k === 'stoneCategory' && v === 'Diamond' && config.stoneType) ? `Diamond (${config.stoneType})` : (k === 'budget' && v === BUDGET_NOT_SURE) ? 'Not sure' : (k === 'budget' && typeof v === 'number' && v > 0) ? `${userState.currency} ${Math.round(Number(v) / _rate).toLocaleString()}` : (v as string);
               return (
-                <div key={k} className="flex justify-between items-center text-[10px] uppercase tracking-widest opacity-60">
+                <div key={k} className="flex justify-between items-center text-[10px] uppercase tracking-widest opacity-78">
                   <span className="capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>
                   <span className="font-bold text-current">{display}</span>
                 </div>
@@ -326,7 +380,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
       const showRingSub = config.ringSubExpanded || ['Wedding Band', 'Engagement Ring', 'Ring'].includes(config.type);
       return (
         <div className="space-y-8 py-4">
-          <p className="text-[11px] uppercase tracking-widest opacity-60">What type of jewellery are you looking to create?</p>
+          <p className="text-[11px] uppercase tracking-widest opacity-78">What type of jewellery are you looking to create?</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[{ id: 'ring', label: 'Ring', value: 'Ring' }, { id: 'earrings', label: 'Earrings', value: 'Earrings' }, { id: 'necklace', label: 'Necklace', value: 'Necklace' }, { id: 'bracelet', label: 'Bracelet', value: 'Bracelet' }, { id: 'pendant', label: 'Pendant', value: 'Pendant' }, { id: 'loose', label: 'Loose Diamond', value: 'Loose Stone' }, { id: 'other', label: 'Other', value: 'Other' }].map(({ id, label, value }) => (
               <button key={id} type="button" onClick={() => onTypeSelect(value)} className={`py-5 border transition-all uppercase tracking-[0.2em] text-[9px] ${(value === 'Ring' && showRingSub) || config.type === value ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>{label}</button>
@@ -334,7 +388,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
           </div>
           {showRingSub && (
             <div className="pl-4 border-l-2 border-current/20 space-y-3">
-              <label className="text-[10px] uppercase tracking-widest opacity-40">Ring type</label>
+              <label className="text-[10px] uppercase tracking-widest opacity-68">Ring type</label>
               <div className="flex flex-wrap gap-3">
                 <button type="button" onClick={() => update({ type: 'Wedding Band', ringSubExpanded: undefined, typeOtherDetail: undefined })} className={`py-3 px-5 border transition-all uppercase tracking-widest text-[9px] ${config.type === 'Wedding Band' ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Wedding Band</button>
                 <button type="button" onClick={() => update({ type: 'Engagement Ring', ringSubExpanded: undefined, typeOtherDetail: undefined })} className={`py-3 px-5 border transition-all uppercase tracking-widest text-[9px] ${config.type === 'Engagement Ring' ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>Engagement Ring</button>
@@ -346,7 +400,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
             </div>
           )}
           <div>
-            <label className="text-[10px] uppercase tracking-widest opacity-40 block mb-2">Describe your design idea</label>
+            <label className="text-[10px] uppercase tracking-widest opacity-68 block mb-2">Describe your design idea</label>
             <textarea value={config.designDescription || ''} onChange={e => update({ designDescription: e.target.value })} placeholder="Please share any details about your design concept..." rows={4} className="w-full bg-white/5 border border-white/10 p-4 text-sm font-light focus:outline-none focus:border-current/30 resize-none" />
           </div>
         </div>
@@ -357,7 +411,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
       const isNotSure = config.budget === BUDGET_NOT_SURE;
       return (
         <div className="space-y-8 py-4">
-          <p className="text-[11px] uppercase tracking-widest opacity-60">Your budget helps us tailor the materials and design to match your expectations.</p>
+          <p className="text-[11px] uppercase tracking-widest opacity-78">Your budget helps us tailor the materials and design to match your expectations.</p>
           {hasInspiration && (
             <button type="button" onClick={handleSkipToContact} className="w-full py-3 border border-dashed border-current/30 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100">Skip to contact — we&apos;ll quote from your inspiration</button>
           )}
@@ -374,7 +428,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
             </div>
           )}
           {isNotSure && (
-            <p className="text-[9px] uppercase tracking-widest opacity-60">We&apos;ll quote based on your design choices — no obligation.</p>
+            <p className="text-[9px] uppercase tracking-widest opacity-78">We&apos;ll quote based on your design choices — no obligation.</p>
           )}
         </div>
       );
@@ -382,14 +436,14 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
     case 'Metal':
       return (
         <div className="space-y-6 py-4">
-          <p className="text-[11px] uppercase tracking-widest opacity-60">Select your preferred metal</p>
+          <p className="text-[11px] uppercase tracking-widest opacity-78">Select your preferred metal</p>
           {hasInspiration && (
             <button type="button" onClick={handleSkipToContact} className="w-full py-3 border border-dashed border-current/30 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100">Skip to contact — we&apos;ll quote from your inspiration</button>
           )}
           <MetalOptions data={METAL_DATA} keys={MAIN_METALS} current={config.metal} onSelect={(v: string) => selectAndAdvance({ metal: v })} />
           <div className="mt-6 p-4 border border-current/10 bg-current/[0.02]">
             <p className="text-[9px] uppercase tracking-widest font-bold opacity-70 mb-2">{config.metal ? `${config.metal} — why it works` : 'Why metal choice matters'}</p>
-            <p className="text-[9px] opacity-60 leading-relaxed">{config.metal && METAL_DATA[config.metal] ? METAL_DATA[config.metal].insight : 'Platinum is the most durable and naturally white. 18K is richer but softer than 14K. White Gold is rhodium-plated and needs replating. Rose Gold is romantic and a bit tougher. Silver and Sterling are affordable; 14K is the practical everyday choice.'}</p>
+            <p className="text-[9px] opacity-78 leading-relaxed">{config.metal && METAL_DATA[config.metal] ? METAL_DATA[config.metal].insight : 'Platinum is the most durable and naturally white. 18K is richer but softer than 14K. White Gold is rhodium-plated and needs replating. Rose Gold is romantic and a bit tougher. Silver and Sterling are affordable; 14K is the practical everyday choice.'}</p>
           </div>
         </div>
       );
@@ -399,7 +453,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
       const isRing = ['Engagement Ring', 'Wedding Band', 'Ring'].includes(config.type);
       return (
         <div className="space-y-8 py-4">
-          <p className="text-[11px] uppercase tracking-widest opacity-60">What type of stones would you like? For diamonds, choose Lab, Natural, or Moissanite.</p>
+          <p className="text-[11px] uppercase tracking-widest opacity-78">What type of stones would you like? For diamonds, choose Lab, Natural, or Moissanite.</p>
           {hasInspiration && (
             <button type="button" onClick={handleSkipToContact} className="w-full py-3 border border-dashed border-current/30 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100">Skip to contact — we&apos;ll quote from your inspiration</button>
           )}
@@ -414,7 +468,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
           </div>
           {showGemstoneList && (
             <>
-              <label className="text-[10px] uppercase tracking-widest opacity-40">Select Gemstone Type</label>
+              <label className="text-[10px] uppercase tracking-widest opacity-68">Select Gemstone Type</label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {GEMSTONE_TYPES.map(g => (
                   <button key={g} type="button" onClick={() => selectAndAdvance({ stoneCategory: g })} className={`py-5 border transition-all uppercase tracking-widest text-[9px] ${config.stoneCategory === g ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}>{g}</button>
@@ -870,7 +924,8 @@ const QualityOptions = ({ current, onSelect, availableTiers, budget, calculateCa
   );
 };
 
-const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, onUpdateConfig, onRegenerateImage, onApprove }: any) => {
+const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, onUpdateConfig, onRegenerateImage, onApprove, onStartOver, logoUrl }: any) => {
+  const logoSrc = logoUrl || LOGO_URL;
   const [advice, setAdvice] = useState<string[]>([]);
   const [variations, setVariations] = useState<JewelleryConfig[]>([]);
   const [isLoadingAdvice, setIsLoadingAdvice] = useState(false);
@@ -933,7 +988,7 @@ const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, on
     try {
       const logoImg = new Image();
       logoImg.crossOrigin = 'anonymous';
-      logoImg.src = LOGO_URL;
+      logoImg.src = logoSrc;
       
       await new Promise((resolve, reject) => {
         logoImg.onload = () => {
@@ -997,12 +1052,12 @@ const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, on
     try {
       const logoImg = new Image();
       logoImg.crossOrigin = 'anonymous';
-      logoImg.src = LOGO_URL;
+      logoImg.src = logoSrc;
       
       await new Promise((resolve) => {
         logoImg.onload = () => {
           try {
-            doc.addImage(LOGO_URL, 'PNG', 20, 15, 40, 12);
+            doc.addImage(logoSrc, 'PNG', 20, 15, 40, 12);
             resolve(null);
           } catch (e) {
             console.error('Error adding logo to page 2:', e);
@@ -1106,6 +1161,13 @@ const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, on
         </div>
       ) : (
         <>
+          {onStartOver && (
+            <div className="flex justify-end -mt-4 mb-2">
+              <button type="button" onClick={onStartOver} className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">
+                <RotateCcw size={12} /> Start over
+              </button>
+            </div>
+          )}
           <img src={config.imageUrl} className="w-full max-w-xl mx-auto aspect-square object-cover shadow-2xl border border-white/5" />
           
           <div className="flex flex-col md:flex-row gap-4 justify-center">

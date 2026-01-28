@@ -1,7 +1,9 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { useLocation, useNavigate, Routes, Route } from 'react-router-dom';
-import { AppView, UserState, JewelleryConfig, Lead } from './types';
+import { AppView, UserState, JewelleryConfig, Lead, CatalogProduct, EmailFlow, JewelerSettings } from './types';
+import { fetchDesigns, fetchLeads, fetchCatalogProducts, fetchEmailFlows, fetchJewelerSettings, upsertDesign, upsertDesigns, upsertLead, upsertLeads, subscribeDesigns, subscribeLeads, subscribeCatalogProducts, subscribeEmailFlows, getSession, onAuthStateChange, setEffectiveJewelerId, supabase } from './lib/supabase';
+import type { User } from '@supabase/supabase-js';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Home from './components/Home';
@@ -10,53 +12,139 @@ import Learn from './components/Learn';
 import Chatbot from './components/Chatbot';
 import Portal from './components/Portal';
 import Resources from './components/Resources';
-import Blog from './components/Blog';
 import FloatingConcierge from './components/FloatingConcierge';
+
+const Blog = lazy(() => import('./components/Blog'));
 import JewelerPortal from './components/JewelerPortal';
+import Collection from './components/Collection';
+import OrderTracking from './components/OrderTracking';
 import Terms from './components/Terms';
+import TutorialWizard from './components/TutorialWizard';
+import BookConsultation from './components/BookConsultation';
+import { LOGO_URL } from './constants';
+
+const defaultState: UserState = {
+  diamondIQ: [],
+  recentDesigns: [],
+  leads: [],
+  currency: 'ZAR',
+  theme: 'dark',
+  builderDraft: {}
+};
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>('Home');
+  const [tourOpen, setTourOpen] = useState(false);
   const [userState, setUserState] = useState<UserState>(() => {
     const saved = localStorage.getItem('diamond_guy_v4');
-    if (saved) return JSON.parse(saved);
-    return {
-      diamondIQ: [],
-      recentDesigns: [],
-      leads: [],
-      currency: 'ZAR',
-      theme: 'dark',
-      builderDraft: {}
-    };
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...defaultState, ...parsed, recentDesigns: parsed.recentDesigns ?? [], leads: parsed.leads ?? [] };
+      } catch {
+        return { ...defaultState };
+      }
+    }
+    return { ...defaultState };
   });
+  const [syncedOnce, setSyncedOnce] = useState(false);
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [emailFlows, setEmailFlows] = useState<EmailFlow[]>([]);
+  const [jewelerSettings, setJewelerSettings] = useState<JewelerSettings | null>(null);
 
+  const refreshJewelerSettings = useCallback(async () => {
+    const s = await fetchJewelerSettings();
+    setJewelerSettings(s);
+  }, []);
+
+  // Auth: init session, set effective jeweler for RLS, then load from Supabase
   useEffect(() => {
+    let cancelled = false;
+    const applySession = (user: User | null) => {
+      setSessionUser(user);
+      setEffectiveJewelerId(user?.email ?? '');
+    };
+    getSession().then(({ data }) => {
+      if (cancelled) return;
+      const user = data?.session?.user ?? null;
+      applySession(user);
+      // Load from DB after session so RLS uses correct jeweler_id
+      Promise.all([fetchDesigns(), fetchLeads(), fetchCatalogProducts(), fetchEmailFlows(), fetchJewelerSettings()]).then(([designs, leads, catalog, flows, settings]) => {
+        if (cancelled) return;
+        setUserState(prev => ({
+          ...prev,
+          recentDesigns: designs.length ? designs : prev.recentDesigns,
+          leads: leads.length ? leads : prev.leads
+        }));
+        setCatalogProducts(catalog);
+        setEmailFlows(flows);
+        setJewelerSettings(settings as JewelerSettings | null);
+        setSyncedOnce(true);
+      });
+    });
+    const unsub = onAuthStateChange((_, session) => {
+      if (cancelled) return;
+      applySession(session?.user ?? null);
+      // Refetch so UI shows the correct tenant (or anon scope) immediately
+      Promise.all([fetchDesigns(), fetchLeads(), fetchCatalogProducts(), fetchEmailFlows(), fetchJewelerSettings()]).then(([designs, leads, catalog, flows, settings]) => {
+        if (cancelled) return;
+        setUserState(prev => ({ ...prev, recentDesigns: designs, leads }));
+        setCatalogProducts(catalog);
+        setEmailFlows(flows);
+        setJewelerSettings(settings as JewelerSettings | null);
+      });
+    });
+    return () => { cancelled = true; unsub(); };
+  }, []);
+
+  // Realtime: when designs, leads, or catalog change, update state
+  useEffect(() => {
+    const unsubDesigns = subscribeDesigns(designs => {
+      setUserState(prev => ({ ...prev, recentDesigns: designs }));
+    });
+    const unsubLeads = subscribeLeads(leads => {
+      setUserState(prev => ({ ...prev, leads }));
+    });
+    const unsubCatalog = subscribeCatalogProducts(setCatalogProducts);
+    const unsubFlows = subscribeEmailFlows(setEmailFlows);
+    return () => {
+      unsubDesigns();
+      unsubLeads();
+      unsubCatalog();
+      unsubFlows();
+    };
+  }, []);
+
+  // Persist theme + local-only prefs to localStorage; sync designs/leads to Supabase when they change
+  useEffect(() => {
+    const { recentDesigns, leads, ...rest } = userState;
     localStorage.setItem('diamond_guy_v4', JSON.stringify(userState));
     document.body.className = userState.theme;
   }, [userState]);
 
-  const saveDesign = (design: JewelleryConfig) => {
+  const saveDesign = useCallback(async (design: JewelleryConfig) => {
     setUserState(prev => ({
       ...prev,
       recentDesigns: [design, ...prev.recentDesigns].slice(0, 50),
-      builderDraft: {} // Clear draft after saving
+      builderDraft: {}
     }));
-  };
+    await upsertDesign(design);
+  }, []);
 
   const updateDraft = useCallback((draft: Partial<JewelleryConfig>) => {
     setUserState(prev => ({ ...prev, builderDraft: draft }));
   }, []);
 
-  const addLead = (lead: Lead) => {
-    setUserState(prev => ({
-      ...prev,
-      leads: [lead, ...prev.leads].slice(0, 100)
-    }));
-  };
+  const addLead = useCallback(async (lead: Lead) => {
+    setUserState(prev => ({ ...prev, leads: [lead, ...prev.leads].slice(0, 100) }));
+    await upsertLead(lead);
+  }, []);
 
-  const updateAllDesigns = (designs: JewelleryConfig[]) => {
+  const updateAllDesigns = useCallback(async (designs: JewelleryConfig[]) => {
     setUserState(prev => ({ ...prev, recentDesigns: designs }));
-  };
+    await upsertDesigns(designs);
+  }, []);
 
   const handlePartnerNudge = (configId: string) => {
     const design = userState.recentDesigns.find(d => d.id === configId);
@@ -71,7 +159,8 @@ const App: React.FC = () => {
       description: `Client sent a partner nudge for design ${configId}.`,
       date: new Date().toLocaleDateString(),
       status: 'New',
-      nudgedByClient: true
+      nudgedByClient: true,
+      source: 'Partner Nudge'
     };
     addLead(newLead);
   };
@@ -96,6 +185,7 @@ const App: React.FC = () => {
   };
 
   const mainPt = isBlog || currentView !== 'Home' ? 'pt-24' : 'pt-0';
+  const logoUrl = (jewelerSettings?.logoUrl && String(jewelerSettings.logoUrl).trim()) ? jewelerSettings.logoUrl! : LOGO_URL;
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-500`}>
@@ -106,20 +196,27 @@ const App: React.FC = () => {
         toggleTheme={() => setUserState(prev => ({ ...prev, theme: prev.theme === 'dark' ? 'light' : 'dark' }))}
         currency={userState.currency}
         setCurrency={(curr) => setUserState(prev => ({ ...prev, currency: curr }))}
+        onOpenTour={() => setTourOpen(true)}
+        sessionUser={sessionUser}
+        logoUrl={logoUrl}
+        forceDarkNav={currentView === 'Home'}
       />
       <main className={`flex-grow pb-12 ${mainPt}`}>
         <Routes>
-          <Route path="/blog/:slug" element={<Blog theme={userState.theme} onNavigateTo={handleNavTo} />} />
-          <Route path="/blog" element={<Blog theme={userState.theme} onNavigateTo={handleNavTo} />} />
+          <Route path="/blog/:slug" element={<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="text-[10px] uppercase tracking-widest opacity-50">Loading…</span></div>}><Blog theme={userState.theme} onNavigateTo={handleNavTo} /></Suspense>} />
+          <Route path="/blog" element={<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="text-[10px] uppercase tracking-widest opacity-50">Loading…</span></div>}><Blog theme={userState.theme} onNavigateTo={handleNavTo} /></Suspense>} />
           <Route path="*" element={
             <>
-              {currentView === 'Home' && <Home onStart={() => setCurrentView('RingBuilder')} onLearn={() => setCurrentView('Learn')} />}
-              {currentView === 'RingBuilder' && <RingBuilder userState={userState} onSave={saveDesign} onUpdateDraft={updateDraft} />}
+              {currentView === 'Home' && <Home theme={userState.theme} onStart={() => setCurrentView('RingBuilder')} onLearn={() => setCurrentView('Learn')} />}
+              {currentView === 'RingBuilder' && <RingBuilder userState={userState} onSave={saveDesign} onUpdateDraft={updateDraft} sessionUser={sessionUser} hasAuth={!!supabase} logoUrl={logoUrl} />}
               {currentView === 'Learn' && <Learn onNavigate={setCurrentView} theme={userState.theme} />}
-              {currentView === 'Resources' && <Resources />}
+              {currentView === 'Collection' && <Collection catalogProducts={catalogProducts} addLead={addLead} setView={setCurrentView} currency={userState.currency} />}
+              {currentView === 'Resources' && <Resources logoUrl={logoUrl} />}
               {currentView === 'Chatbot' && <Chatbot onNavigate={setCurrentView} onLeadSubmit={addLead} />}
-              {currentView === 'Portal' && <Portal userState={userState} setView={setCurrentView} onNudge={handlePartnerNudge} onEditDesign={handleEditDesign} />}
-              {currentView === 'JewelerPortal' && <JewelerPortal userState={userState} onUpdate={updateAllDesigns} onLeadsUpdate={(leads) => setUserState(prev => ({ ...prev, leads }))} />}
+              {currentView === 'Portal' && <Portal userState={userState} setView={setCurrentView} onNudge={handlePartnerNudge} onEditDesign={handleEditDesign} hasAuth={!!supabase} sessionUser={sessionUser} />}
+              {currentView === 'JewelerPortal' && <JewelerPortal userState={userState} onUpdate={updateAllDesigns} onLeadsUpdate={(leads) => { setUserState(prev => ({ ...prev, leads })); upsertLeads(leads); }} catalogProducts={catalogProducts} onCatalogUpdate={setCatalogProducts} emailFlows={emailFlows} onEmailFlowsUpdate={setEmailFlows} jewelerSettings={jewelerSettings} onJewelerSettingsRefresh={refreshJewelerSettings} sessionUser={sessionUser} />}
+              {currentView === 'Track' && <OrderTracking designs={userState.recentDesigns} sessionUser={sessionUser} hasAuth={!!supabase} currency={userState.currency} onNavigate={handleNavTo} />}
+              {currentView === 'Book' && <BookConsultation theme={userState.theme} onNavigate={handleNavTo} openingHours={jewelerSettings?.openingHours ?? undefined} />}
               {currentView === 'Terms' && <Terms />}
             </>
           } />
@@ -130,8 +227,15 @@ const App: React.FC = () => {
         <button onClick={() => { handleNavTo('JewelerPortal'); }} className="text-[6px] uppercase tracking-widest text-current opacity-20">Admin CRM</button>
       </div>
 
-      <Footer theme={userState.theme} onNavigate={handleNavTo} />
+      <Footer theme={userState.theme} onNavigate={handleNavTo} onOpenTour={() => setTourOpen(true)} hours={jewelerSettings?.openingHours ?? undefined} logoUrl={logoUrl} />
       <FloatingConcierge onNavigate={handleNavTo} />
+      <TutorialWizard
+        isOpen={tourOpen}
+        onClose={() => setTourOpen(false)}
+        onNavigate={handleNavTo}
+        currentView={currentView}
+        theme={userState.theme}
+      />
     </div>
   );
 };

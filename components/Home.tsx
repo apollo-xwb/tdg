@@ -6,7 +6,7 @@ import homeImg from '../src/home.png';
 
 const VIDEO_URL = 'https://cdn.create.vista.com/api/media/medium/364417012/stock-video-beautiful-wedding-ring-rotating-on-dark-background-golden-ring-with-diamonds?token=';
 
-const Home: React.FC<{ onStart: () => void, onLearn: () => void }> = ({ onStart, onLearn }) => {
+const Home: React.FC<{ theme?: 'dark' | 'light'; onStart: () => void; onLearn: () => void }> = ({ theme = 'dark', onStart, onLearn }) => {
   return (
     <div className="flex flex-col items-center">
       {/* Split hero: video left (with text/gradient), image right. Media stretches to top under navbar. */}
@@ -25,7 +25,7 @@ const Home: React.FC<{ onStart: () => void, onLearn: () => void }> = ({ onStart,
           <div className="relative z-10 px-6 py-16 lg:py-24 pt-28 lg:pt-32">
             <p className="text-[#A9A9A9] text-[10px] uppercase tracking-[0.4em] mb-2">{DONTPAYRETAIL}</p>
             <p className="text-[#A9A9A9] text-sm uppercase tracking-[0.3em] mb-4">Cape Town • Global</p>
-            <h1 className="text-4xl md:text-6xl font-thin tracking-tight leading-tight mb-6">
+            <h1 className="text-white text-4xl md:text-6xl font-thin tracking-tight leading-tight mb-6">
               CRAFT YOUR DREAM JEWELLERY <br/>
               <span className="font-light italic">WITHOUT THE HASSLE.</span>
             </h1>
@@ -42,7 +42,7 @@ const Home: React.FC<{ onStart: () => void, onLearn: () => void }> = ({ onStart,
               </button>
               <button
                 onClick={onLearn}
-                className="border border-white/20 px-8 py-3.5 text-[10px] uppercase tracking-widest font-medium hover:bg-white/5 transition-all"
+                className="text-white border border-white/20 px-8 py-3.5 text-[10px] uppercase tracking-widest font-medium hover:bg-white/5 transition-all"
               >
                 Learn About Jewellery
               </button>
@@ -62,8 +62,8 @@ const Home: React.FC<{ onStart: () => void, onLearn: () => void }> = ({ onStart,
       {/* Centered #DontPayRetail above the feature boxes */}
       <section className="w-full py-16 px-6">
         <div className="max-w-2xl mx-auto text-center">
-          <p className="text-[10px] uppercase tracking-[0.35em] text-white/50 mb-2">{DONTPAYRETAIL}</p>
-          <p className="text-[9px] uppercase tracking-widest text-white/40 leading-relaxed">
+          <p className={`text-[10px] uppercase tracking-[0.35em] mb-2 ${theme === 'light' ? 'text-black' : 'text-white'}`}>{DONTPAYRETAIL}</p>
+          <p className={`text-[9px] uppercase tracking-widest leading-relaxed ${theme === 'light' ? 'text-black/80' : 'text-white'}`}>
             Pioneers of the movement. Custom only. No inventory—that’s how we charge under retail. Ethically sourced diamonds. Certified. GIA & EGL.
           </p>
         </div>
@@ -72,16 +72,19 @@ const Home: React.FC<{ onStart: () => void, onLearn: () => void }> = ({ onStart,
       {/* Features Grid */}
       <section className="py-12 lg:py-24 px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-16">
         <Feature
+          theme={theme}
           icon={<ShieldCheck size={32} strokeWidth={1} />}
           title="Ethical Sourcing"
           desc={`Natural or Lab—every stone is certified and ethically verified. ${DONTPAYRETAIL}.`}
         />
         <Feature
+          theme={theme}
           icon={<Sparkles size={32} strokeWidth={1} />}
           title="Master Craftsmanship"
           desc="Each piece is made to order. No inventory. Custom design, under retail."
         />
         <Feature
+          theme={theme}
           icon={<Clock size={32} strokeWidth={1} />}
           title="Global Concierge"
           desc="Track from CAD to final polish. Fully insured global delivery."
@@ -91,12 +94,15 @@ const Home: React.FC<{ onStart: () => void, onLearn: () => void }> = ({ onStart,
   );
 };
 
-const Feature = ({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) => (
-  <div className="flex flex-col items-center text-center space-y-6">
-    <div className="text-white/20 mb-2">{icon}</div>
-    <h3 className="text-sm uppercase tracking-[0.4em] font-light">{title}</h3>
-    <p className="text-gray-500 text-sm font-light leading-relaxed px-4">{desc}</p>
-  </div>
-);
+const Feature = ({ theme = 'dark', icon, title, desc }: { theme?: 'dark' | 'light'; icon: React.ReactNode; title: string; desc: string }) => {
+  const isLight = theme === 'light';
+  return (
+    <div className="flex flex-col items-center text-center space-y-6">
+      <div className={`mb-2 ${isLight ? 'text-black' : 'text-white'}`}>{icon}</div>
+      <h3 className={`text-sm uppercase tracking-[0.4em] font-light ${isLight ? 'text-black' : 'text-white'}`}>{title}</h3>
+      <p className={`text-sm font-light leading-relaxed px-4 ${isLight ? 'text-black' : 'text-white'}`}>{desc}</p>
+    </div>
+  );
+};
 
 export default Home;
