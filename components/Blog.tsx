@@ -70,7 +70,7 @@ export default function Blog({ theme, onNavigateTo }: BlogProps) {
   }, []);
 
   const allArticles = useMemo(() => [...jewelerArticles, ...BLOG_ARTICLES], [jewelerArticles]);
-  const article = slug ? allArticles.find((a) => a.slug === slug) ?? null;
+  const article = slug ? (allArticles.find((a) => a.slug === slug) ?? null) : null;
 
   // ——— SEO: document title and meta ———
   useEffect(() => {
