@@ -4,13 +4,13 @@ import { GoogleGenAI, Type } from "@google/genai";
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { JewelleryConfig, UserState, OrderStatus, JewelleryType, StoneType, StoneCategory } from '../types';
 import AuthGate from './AuthGate';
-import { BASE_PRICE, LAB_DIAMOND_PRICE_FACTOR, NATURAL_DIAMOND_BASE, MOISSANITE_BASE, GEMSTONE_BASE, METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, EXCHANGE_RATES, JEWELLERY_TYPES, GIA_LOGO, EGI_LOGO, LOGO_URL, BUDGET_OPTIONS, BUDGET_NOT_SURE, GEMSTONE_TYPES, TIMELINE_OPTIONS, JEWELLERY_GUIDE_TYPES, DONTPAYRETAIL } from '../constants';
+import { BASE_PRICE, LAB_DIAMOND_PRICE_FACTOR, NATURAL_DIAMOND_BASE, MOISSANITE_BASE, GEMSTONE_BASE, METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, EXCHANGE_RATES, JEWELLERY_TYPES, GIA_LOGO, EGI_LOGO, LOGO_URL, BUDGET_OPTIONS, BUDGET_NOT_SURE, GEMSTONE_TYPES, TIMELINE_OPTIONS, JEWELLERY_GUIDE_TYPES, DONTPAYRETAIL, PIECE_STYLES } from '../constants';
 import { RING_SYSTEMS, findRowByDiameter, findRowBySystemAndSize, getSizesForSystem } from '../ringSizeData';
 import RingSizeTable from './RingSizeTable';
 import RingSizeVisualizer from './RingSizeVisualizer';
 import RingWeightInfo from './RingWeightInfo';
 import CustomSelect from './CustomSelect';
-import { Download, Save, Info, ChevronRight, ChevronLeft, Ruler, AlertCircle, Eye, User, Mail, Shield, CheckCircle, Send, Clock, BadgeCheck, Wand2, HelpCircle, MessageSquare, CreditCard, Upload, RotateCcw } from 'lucide-react';
+import { Download, Save, Info, ChevronRight, ChevronLeft, Ruler, AlertCircle, Eye, User, Mail, Shield, CheckCircle, Send, Clock, BadgeCheck, Wand2, HelpCircle, MessageSquare, CreditCard, Upload, RotateCcw, Compass } from 'lucide-react';
 
 interface Props {
   userState: UserState;
@@ -20,11 +20,13 @@ interface Props {
   hasAuth?: boolean;
   /** Site logo URL for quotes, PDFs, watermarks. Defaults to LOGO_URL when omitted. */
   logoUrl?: string;
+  /** Optional: navigate to Explore to browse other creations. */
+  onNavigateToExplore?: () => void;
 }
 
 const MAIN_METALS = ['Platinum', '18K Gold', '14K Gold', 'White Gold', 'Rose Gold', 'Sterling Silver', 'Other'] as const;
 
-const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft, sessionUser = null, hasAuth = false, logoUrl }) => {
+const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft, sessionUser = null, hasAuth = false, logoUrl, onNavigateToExplore }) => {
   const logoSrc = logoUrl ?? LOGO_URL;
   const [config, setConfig] = useState<Partial<JewelleryConfig>>(() => ({
     id: `TDG-${Math.random().toString(36).substr(2, 7).toUpperCase()}`,
@@ -84,22 +86,24 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft, sessio
       designInspirationUrl: config.designInspirationUrl,
       pinterestLink: config.pinterestLink,
       designDescription: config.designDescription,
+      pieceStyle: config.pieceStyle,
       timeline: config.timeline,
       typeOtherDetail: config.typeOtherDetail
     };
     onUpdateDraft(draft);
-  }, [config.type, config.stoneType, config.stoneCategory, config.metal, config.settingStyle, config.shape, config.ringSize, config.ringSizeStandard, config.budget, config.qualityTier, config.engraving, config.carat, config.firstName, config.lastName, config.fullName, config.email, config.phone, config.isDiscreet, config.designInspirationUrl, config.pinterestLink, config.designDescription, config.timeline, config.typeOtherDetail, onUpdateDraft]);
+  }, [config.type, config.stoneType, config.stoneCategory, config.metal, config.settingStyle, config.shape, config.ringSize, config.ringSizeStandard, config.budget, config.qualityTier, config.engraving, config.carat, config.firstName, config.lastName, config.fullName, config.email, config.phone, config.isDiscreet, config.designInspirationUrl, config.pinterestLink, config.designDescription, config.pieceStyle, config.timeline, config.typeOtherDetail, onUpdateDraft]);
 
   const steps = useMemo(() => {
     if (config.type === 'Loose Stone') {
       return ['Loose: Origin', 'Loose: Budget', 'Loose: Shape', 'Loose: Quality', 'Contact'];
     }
     const s: string[] = ['Design Inspiration', 'Jewellery Type', 'Budget', 'Metal', 'Stones'];
+    if (['Necklace', 'Bracelet', 'Earrings', 'Pendant'].includes(config.type || '')) s.push('Style');
     if (config.stoneCategory && config.stoneCategory !== 'None') s.push('Shape');
-    if (['Engagement Ring', 'Wedding Band', 'Ring'].includes(config.type)) s.push('Setting');
+    if (['Engagement Ring', 'Wedding Band', 'Ring'].includes(config.type || '')) s.push('Setting');
     if (config.stoneCategory === 'Diamond' || config.stoneCategory === 'Moissanite') s.push('Quality Tier');
     s.push('Timeline');
-    if (['Engagement Ring', 'Wedding Band', 'Ring'].includes(config.type)) s.push('Ring Size');
+    if (['Engagement Ring', 'Wedding Band', 'Ring'].includes(config.type || '')) s.push('Ring Size');
     s.push('Contact', 'Review');
     return s;
   }, [config.type, config.stoneCategory]);
@@ -124,6 +128,7 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft, sessio
     if (cur === 'Jewellery Type') return !!config.type && (config.type !== 'Ring' || !!config.typeOtherDetail);
     if (cur === 'Budget') return (config.budget || 0) > 0 || config.budget === BUDGET_NOT_SURE;
     if (cur === 'Metal') return !!config.metal;
+    if (cur === 'Style') return !!config.pieceStyle;
     if (cur === 'Stones') return !!config.stoneCategory && (config.stoneCategory === 'None' || config.stoneCategory === 'Moissanite' || GEMSTONE_TYPES.includes(config.stoneCategory) || (config.stoneCategory === 'Diamond' && (config.stoneType === 'Lab' || config.stoneType === 'Natural')));
     if (cur === 'Shape') return !!config.shape;
     if (cur === 'Setting') return !!config.settingStyle;
@@ -175,8 +180,9 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft, sessio
       } else {
         const engraveText = cfg.engraving ? `, with the message "${cfg.engraving}" professionally engraved` : "";
         const stoneDesc = cfg.stoneCategory === 'None' || !cfg.stoneCategory ? "pure precious metal design without stones" : `${cfg.shape || 'Round'} ${cfg.stoneCategory}`;
+        const styleHint = (['Necklace', 'Bracelet', 'Earrings', 'Pendant'].includes(cfg.type || '') && cfg.pieceStyle) ? `, ${cfg.pieceStyle} style` : "";
         const extra = cfg.designDescription ? ` Design direction: ${cfg.designDescription}.` : "";
-        prompt = `A hyper-realistic 8K photograph of a bespoke ${cfg.type} by The Diamond Guy. Crafted in ${cfg.metal || 'Platinum'}. Featuring ${stoneDesc}${engraveText}.${extra} Master-level studio lighting, deep black minimalist background, macro jewelry shot.`;
+        prompt = `A hyper-realistic 8K photograph of a bespoke ${cfg.type} by The Diamond Guy${styleHint}. Crafted in ${cfg.metal || 'Platinum'}. Featuring ${stoneDesc}${engraveText}.${extra} Master-level studio lighting, deep black minimalist background, macro jewelry shot.`;
       }
       const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts: [{ text: prompt }] } });
       const data = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
@@ -265,6 +271,7 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft, sessio
       onRegenerateImage={generateImg}
       onApprove={(d) => { onSave({...d, status: 'Approved'} as JewelleryConfig); setSavedSuccess(true); setTimeout(() => setSavedSuccess(false), 3000); }}
       onStartOver={handleStartFromScratch}
+      onNavigateToExplore={onNavigateToExplore}
       logoUrl={logoSrc}
     />
   );
@@ -277,6 +284,16 @@ const RingBuilder: React.FC<Props> = ({ userState, onSave, onUpdateDraft, sessio
         <div className="flex justify-between items-center mb-6">
           <h4 className="text-[10px] lg:text-[12px] uppercase tracking-[0.6em] font-light text-current">{steps[step]}</h4>
           <div className="flex items-center gap-4">
+            {onNavigateToExplore && (
+              <button
+                type="button"
+                onClick={onNavigateToExplore}
+                className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity"
+                title="Browse Explore"
+              >
+                <Compass size={12} /> Explore
+              </button>
+            )}
             <button
               type="button"
               onClick={handleStartFromScratch}
@@ -369,12 +386,12 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
     case 'Jewellery Type': {
       const onTypeSelect = (v: string) => {
         if (v === 'Loose Stone') {
-          update({ type: 'Loose Stone', stoneCategory: 'Diamond', ringSubExpanded: undefined });
+          update({ type: 'Loose Stone', stoneCategory: 'Diamond', ringSubExpanded: undefined, pieceStyle: undefined });
           setStep(0);
         } else if (v === 'Ring') {
-          update({ ringSubExpanded: true, type: undefined });
+          update({ ringSubExpanded: true, type: undefined, pieceStyle: undefined });
         } else {
-          update({ type: v, ringSubExpanded: undefined });
+          update({ type: v, ringSubExpanded: undefined, pieceStyle: undefined });
         }
       };
       const showRingSub = config.ringSubExpanded || ['Wedding Band', 'Engagement Ring', 'Ring'].includes(config.type);
@@ -476,6 +493,29 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
               </div>
             </>
           )}
+        </div>
+      );
+    }
+    case 'Style': {
+      const styleOptions = (config.type && PIECE_STYLES[config.type]) ? PIECE_STYLES[config.type] : [];
+      return (
+        <div className="space-y-8 py-4">
+          <p className="text-[11px] uppercase tracking-widest opacity-78">Choose a base style to help us visualize your {config.type?.toLowerCase()}. We&apos;ll use this to guide the design.</p>
+          {hasInspiration && (
+            <button type="button" onClick={handleSkipToContact} className="w-full py-3 border border-dashed border-current/30 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100">Skip to contact — we&apos;ll quote from your inspiration</button>
+          )}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {styleOptions.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => selectAndAdvance({ pieceStyle: value })}
+                className={`py-5 border transition-all uppercase tracking-[0.2em] text-[9px] ${config.pieceStyle === value ? 'border-current bg-current/5 font-bold' : 'border-current/10 opacity-60 hover:opacity-100'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       );
     }
@@ -755,6 +795,7 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Type</span><span>{config.type}{config.type === 'Ring' && config.typeOtherDetail ? ` (${config.typeOtherDetail})` : ''}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Budget</span><span>{config.budget === BUDGET_NOT_SURE ? 'Not sure — we\'ll quote from your choices' : formatBudget(config.budget||0)}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Metal</span><span>{config.metal}</span></div>
+                {config.pieceStyle && <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Style</span><span>{config.pieceStyle}</span></div>}
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Stones</span><span>{config.stoneCategory === 'Diamond' ? `Diamond (${config.stoneType || 'Lab'})` : config.stoneCategory}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Timeline</span><span>{config.timeline}</span></div>
                 <div className="flex justify-between py-2 border-b border-white/10"><span className="opacity-50">Contact</span><span>{config.fullName || [config.firstName, config.lastName].filter(Boolean).join(' ')}, {config.email}</span></div>
@@ -924,7 +965,7 @@ const QualityOptions = ({ current, onSelect, availableTiers, budget, calculateCa
   );
 };
 
-const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, onUpdateConfig, onRegenerateImage, onApprove, onStartOver, logoUrl }: any) => {
+const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, onUpdateConfig, onRegenerateImage, onApprove, onStartOver, onNavigateToExplore, logoUrl }: any) => {
   const logoSrc = logoUrl || LOGO_URL;
   const [advice, setAdvice] = useState<string[]>([]);
   const [variations, setVariations] = useState<JewelleryConfig[]>([]);
@@ -1077,9 +1118,11 @@ const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, on
     doc.line(20, 45, 190, 45);
 
     let y = 60;
-    const specs = config.type === 'Loose Stone'
-      ? [["Category", config.type], ["Stone Type", config.stoneType], ["Shape", config.shape || 'N/A'], ["Quality Tier", config.qualityTier || 'N/A']]
-      : [["Category", config.type], ["Stone Type", config.stoneType], ["Stone Variety", config.stoneCategory], ["Metal", config.metal || 'N/A'], ["Shape", config.shape || 'N/A'], ["Setting", config.settingStyle || 'N/A'], ["Quality Tier", config.qualityTier || 'N/A']];
+    const specsLoose = [["Category", config.type], ["Stone Type", config.stoneType], ["Shape", config.shape || 'N/A'], ["Quality Tier", config.qualityTier || 'N/A']];
+    const specsPiece = [["Category", config.type], ["Stone Type", config.stoneType], ["Stone Variety", config.stoneCategory], ["Metal", config.metal || 'N/A']];
+    if (['Necklace', 'Bracelet', 'Earrings', 'Pendant'].includes(config.type || '') && config.pieceStyle) specsPiece.push(["Base style", config.pieceStyle]);
+    specsPiece.push(["Shape", config.shape || 'N/A'], ["Setting", config.settingStyle || 'N/A'], ["Quality Tier", config.qualityTier || 'N/A']);
+    const specs = config.type === 'Loose Stone' ? specsLoose : specsPiece;
 
     specs.forEach(([label, val]) => {
       doc.setFont("helvetica", "normal"); doc.setFontSize(8);
@@ -1161,14 +1204,21 @@ const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, on
         </div>
       ) : (
         <>
-          {onStartOver && (
-            <div className="flex justify-end -mt-4 mb-2">
-              <button type="button" onClick={onStartOver} className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">
-                <RotateCcw size={12} /> Start over
-              </button>
+          {(onStartOver || onNavigateToExplore) && (
+            <div className="flex justify-end items-center gap-4 -mt-4 mb-2">
+              {onNavigateToExplore && (
+                <button type="button" onClick={onNavigateToExplore} className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">
+                  <Compass size={12} /> Explore
+                </button>
+              )}
+              {onStartOver && (
+                <button type="button" onClick={onStartOver} className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity">
+                  <RotateCcw size={12} /> Start over
+                </button>
+              )}
             </div>
           )}
-          <img src={config.imageUrl} className="w-full max-w-xl mx-auto aspect-square object-cover shadow-2xl border border-white/5" />
+          <img src={config.imageUrl} className="w-full max-w-xl mx-auto aspect-square object-cover shadow-2xl border border-white/5 rounded-2xl overflow-hidden" />
           
           <div className="flex flex-col md:flex-row gap-4 justify-center">
             <button onClick={getAdvice} className={`${btnClass} px-10 py-5 text-[10px] uppercase tracking-widest font-bold flex items-center justify-center gap-3 shadow-xl transition-all`}>
@@ -1210,6 +1260,7 @@ const ConfigResult = ({ config, currency, theme, isGenerating, onSave, saved, on
                 <div className="space-y-4">
                   <SummaryItem label="Master Category" val={config.type} />
                   {config.type !== 'Loose Stone' && <SummaryItem label="Precious Metal" val={config.metal || 'N/A'} />}
+                  {['Necklace', 'Bracelet', 'Earrings', 'Pendant'].includes(config.type || '') && config.pieceStyle && <SummaryItem label="Base style" val={config.pieceStyle} />}
                   {config.type !== 'Loose Stone' && <SummaryItem label="Stone Variety" val={config.stoneCategory} />}
                   {config.type === 'Loose Stone' && <SummaryItem label="Stone Type" val={config.stoneType || 'N/A'} />}
                   {config.type === 'Loose Stone' && <SummaryItem label="Shape" val={config.shape || 'N/A'} />}

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { User } from '@supabase/supabase-js';
-import type { JewelleryConfig, Lead, CatalogProduct, EmailFlow, EmailFlowFollowUp, JewelerSettings, JewelerPackageTier, JewelerAvailabilitySlot, Appointment, AppointmentStatus, OpeningHoursEntry, VaultGuide, BlogPost, BlogBodyBlock } from '../types';
+import type { JewelleryConfig, Lead, CatalogProduct, EmailFlow, EmailFlowFollowUp, JewelerSettings, JewelerPackageTier, JewelerAvailabilitySlot, Appointment, AppointmentStatus, OpeningHoursEntry, VaultGuide, BlogPost, BlogBodyBlock, JewelerPricingRules } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
@@ -341,12 +341,30 @@ export async function fetchJewelerSettings(jewelerId?: string): Promise<JewelerS
       })) as OpeningHoursEntry[]
     : undefined;
   const logoUrl = s.logoUrl;
+  const termsAndConditions = s.termsAndConditions;
+  const address = s.address;
+  const aboutUs = s.aboutUs;
+  const logoNavbar = s.logoNavbar;
+  const logoFooter = s.logoFooter;
+  const logoQuotes = s.logoQuotes;
+  const logoVault = s.logoVault;
+  const pricingRules = s.pricingRules as JewelerPricingRules | undefined;
+  const googleReviewUrl = s.googleReviewUrl;
   return {
     jewelerId: data.jeweler_id as string,
     packageTier: (data.package_tier as JewelerPackageTier) || 'starter',
     nivodaSourcingEnabled: s.nivodaSourcingEnabled === true,
     openingHours: openingHours?.length ? openingHours : undefined,
     logoUrl: typeof logoUrl === 'string' ? logoUrl : logoUrl === null ? null : undefined,
+    logoNavbar: typeof logoNavbar === 'string' ? logoNavbar : logoNavbar === null ? null : undefined,
+    logoFooter: typeof logoFooter === 'string' ? logoFooter : logoFooter === null ? null : undefined,
+    logoQuotes: typeof logoQuotes === 'string' ? logoQuotes : logoQuotes === null ? null : undefined,
+    logoVault: typeof logoVault === 'string' ? logoVault : logoVault === null ? null : undefined,
+    termsAndConditions: typeof termsAndConditions === 'string' ? termsAndConditions : termsAndConditions === null ? null : undefined,
+    address: typeof address === 'string' ? address : address === null ? null : undefined,
+    aboutUs: typeof aboutUs === 'string' ? aboutUs : aboutUs === null ? null : undefined,
+    pricingRules: pricingRules && typeof pricingRules === 'object' ? pricingRules : undefined,
+    googleReviewUrl: typeof googleReviewUrl === 'string' ? googleReviewUrl : googleReviewUrl === null ? null : undefined,
     updatedAt: (data.updated_at as string) || '',
   };
 }
@@ -366,6 +384,15 @@ export async function upsertJewelerSettings(settings: Partial<JewelerSettings> &
       ? { openingHours: settings.openingHours.map((h) => ({ day: h.day, name: h.name, open: h.open, close: h.close })) }
       : {}),
     ...(settings.logoUrl !== undefined ? { logoUrl: settings.logoUrl || null } : {}),
+    ...(settings.logoNavbar !== undefined ? { logoNavbar: settings.logoNavbar || null } : {}),
+    ...(settings.logoFooter !== undefined ? { logoFooter: settings.logoFooter || null } : {}),
+    ...(settings.logoQuotes !== undefined ? { logoQuotes: settings.logoQuotes || null } : {}),
+    ...(settings.logoVault !== undefined ? { logoVault: settings.logoVault || null } : {}),
+    ...(settings.termsAndConditions !== undefined ? { termsAndConditions: settings.termsAndConditions || null } : {}),
+    ...(settings.address !== undefined ? { address: settings.address || null } : {}),
+    ...(settings.aboutUs !== undefined ? { aboutUs: settings.aboutUs || null } : {}),
+    ...(settings.pricingRules !== undefined ? { pricingRules: settings.pricingRules || null } : {}),
+    ...(settings.googleReviewUrl !== undefined ? { googleReviewUrl: settings.googleReviewUrl || null } : {}),
   };
   const { error } = await supabase.from(JEWELER_SETTINGS_TABLE).upsert(
     { jeweler_id: jewelerId, package_tier: packageTier, settings: nextSettings, updated_at: now },
@@ -639,4 +666,21 @@ export async function deleteBlogPost(id: string): Promise<void> {
   if (!supabase) return;
   const { error } = await supabase.from(BLOG_POSTS_TABLE).delete().eq('id', id);
   if (error) console.warn('[Supabase] deleteBlogPost error:', error.message);
+}
+
+// Storage: jeweler uploads (logos, guide files). Bucket must exist and allow public read + authenticated upload.
+const JEWELER_ASSETS_BUCKET = 'jeweler-assets';
+
+/** Upload a file to jeweler-assets/{jewelerId}/{folder}/{uniqueName}. Returns public URL or null. */
+export async function uploadJewelerAsset(jewelerId: string, folder: 'logos' | 'guides', file: File): Promise<string | null> {
+  if (!supabase || !jewelerId) return null;
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${jewelerId}/${folder}/${Date.now()}-${safeName}`;
+  const { error } = await supabase.storage.from(JEWELER_ASSETS_BUCKET).upload(path, file, { upsert: true });
+  if (error) {
+    console.warn('[Supabase] uploadJewelerAsset error:', error.message);
+    return null;
+  }
+  const { data } = supabase.storage.from(JEWELER_ASSETS_BUCKET).getPublicUrl(path);
+  return data?.publicUrl ?? null;
 }

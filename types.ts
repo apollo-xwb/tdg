@@ -23,7 +23,7 @@ export interface Lead {
   status: LeadStatus;
   nudgedByClient?: boolean;
   catalogProductId?: string;
-  source?: 'Chatbot' | 'Partner Nudge' | 'Ring Builder' | 'Collection Enquiry' | 'Manual';
+  source?: 'Chatbot' | 'Partner Nudge' | 'Ring Builder' | 'Collection Enquiry' | 'Manual' | 'Explore';
   linkedDesignId?: string;
 }
 
@@ -77,6 +77,8 @@ export interface JewelleryConfig {
   designInspirationUrl?: string;
   pinterestLink?: string;
   designDescription?: string;
+  /** Base style for necklaces, bracelets, earrings, pendants — guides the generative process. */
+  pieceStyle?: string;
   timeline?: Timeline;
   typeOtherDetail?: string;
   gender?: 'Men' | 'Women';
@@ -84,6 +86,20 @@ export interface JewelleryConfig {
   imageUrl?: string;
   /** When true, client should be notified (e.g. email) when status changes. Jeweler-facing preference. */
   notifyClientOnStatusChange?: boolean;
+  /** Optional cost (ZAR) for margin/COGS tracking. Jeweler-only. */
+  costZAR?: number;
+  /** Optional margin % applied for this order. Overrides jeweler default when set. */
+  marginPercent?: number;
+  /** Status changed at (ISO). Populated by backend or jeweler edits. */
+  statusUpdatedAt?: string;
+  /** Milestone dates keyed by status. Jeweler-editable. */
+  milestoneDates?: Partial<Record<OrderStatus, string>>;
+  /** Public tracking token for client-facing status page. */
+  trackingToken?: string;
+  /** Paystack reference from webhook. */
+  paystackReference?: string;
+  /** When true or unset, design appears in the Explore feed. Set false to hide from Explore. */
+  showInExplore?: boolean;
 }
 
 export interface UserState {
@@ -117,7 +133,7 @@ export interface EmailFlow {
   updatedAt: string;
 }
 
-export type AppView = 'Home' | 'RingBuilder' | 'Learn' | 'Chatbot' | 'Portal' | 'Resources' | 'JewelerPortal' | 'Terms' | 'Blog' | 'Collection' | 'Track' | 'Book';
+export type AppView = 'Home' | 'RingBuilder' | 'Learn' | 'Chatbot' | 'Portal' | 'Resources' | 'JewelerPortal' | 'Terms' | 'Blog' | 'Collection' | 'Explore' | 'Track' | 'Book' | 'About';
 
 /** Jeweler plan tier; Growth and Pro include Live Diamond Sourcing (Nivoda). */
 export type JewelerPackageTier = 'starter' | 'growth' | 'pro';
@@ -137,9 +153,45 @@ export interface JewelerSettings {
   nivodaSourcingEnabled?: boolean;
   /** Operational hours shown in footer and used for booking when no custom availability is set. */
   openingHours?: OpeningHoursEntry[];
-  /** Site-wide logo URL. Used in navbar, footer, quotes, watermarks, etc. Leave empty to use default. */
+  /** Default logo URL. Used when a placement override is not set. */
   logoUrl?: string | null;
+  /** Logo for navbar. Overrides logoUrl when set. */
+  logoNavbar?: string | null;
+  /** Logo for footer. Overrides logoUrl when set. */
+  logoFooter?: string | null;
+  /** Logo for quote PDFs. Overrides logoUrl when set. */
+  logoQuotes?: string | null;
+  /** Logo for Digital Vault / Guides page. Overrides logoUrl when set. */
+  logoVault?: string | null;
+  /** Terms & conditions HTML or plain text. When set, the public Terms page shows this instead of the default. */
+  termsAndConditions?: string | null;
+  /** Visit / showroom address (map, footer, Book a visit). When set, overrides default. */
+  address?: string | null;
+  /** About us / Our Story page content. When set, the About page shows this instead of the default. */
+  aboutUs?: string | null;
+  /** Jeweler-defined pricing rules for quotes. When set, Manual Quote and builder use these instead of platform defaults. */
+  pricingRules?: JewelerPricingRules | null;
+  /** Google review URL for post-delivery nudge. When set, client can be prompted to leave a review. */
+  googleReviewUrl?: string | null;
   updatedAt: string;
+}
+
+/** Jeweler-defined pricing: piece base per type, metal premiums, quality factors, stone bases, default margin. Stored in jeweler_settings.settings. */
+export interface JewelerPricingRules {
+  /** Fallback when a type has no entry in pieceBaseByType. */
+  basePrice?: number;
+  /** Piece base (ZAR) per jewellery type — starting amount before metal, setting, stone. Loose Stone uses stone-only pricing. */
+  pieceBaseByType?: Partial<Record<JewelleryType, number>>;
+  defaultMarginPercent?: number;
+  metalPremiums?: Record<string, number>;
+  qualityFactors?: Record<string, number>;
+  settingPrices?: Record<string, number>;
+  stoneBases?: {
+    naturalDiamond?: number;
+    moissanite?: number;
+    gemstone?: number;
+    labDiamondFactor?: number;
+  };
 }
 
 /** Recurring weekly availability slot. dayOfWeek 0 = Sunday, 6 = Saturday. */

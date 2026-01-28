@@ -42,8 +42,14 @@ export const MOISSANITE_BASE = 4200;
 export const GEMSTONE_BASE = 15800;
 
 // The Diamond Guy — Cape Town
+/** Business / visit address (footer, Book a visit map). Jeweler can override in portal. */
 export const TDG_ADDRESS = 'Suite 303, The Foundry, 18 Cardiff St, De Waterkant, Cape Town, 8001';
 export const TDG_PHONE = '063 617 1823';
+
+// Google review – for trust (score and count)
+export const GOOGLE_RATING = 5;
+export const GOOGLE_REVIEW_COUNT = 277;
+export const GOOGLE_REVIEW_URL = 'https://www.google.com/maps/search/?api=1&query=The+Diamond+Guy+Cape+Town';
 // Africa/Johannesburg; Sat–Sun Closed; Mon–Thu 9–17; Fri 9–16
 export const OPENING_HOURS = [
   { day: 0, name: 'Sunday', open: null, close: null },
@@ -172,6 +178,53 @@ export const JEWELLERY_TYPES = [
   'Engagement Ring', 'Loose Stone', 'Earrings', 'Necklace', 'Bracelet', 'Wedding Band', 'Pendant', 'Ring', 'Other'
 ];
 
+/** Base styles for non-ring pieces — user picks one to guide the generative process. */
+export const PIECE_STYLES: Record<string, { value: string; label: string }[]> = {
+  Necklace: [
+    { value: 'Solitaire Pendant', label: 'Solitaire Pendant' },
+    { value: 'Tennis', label: 'Tennis' },
+    { value: 'Choker', label: 'Choker' },
+    { value: 'Princess', label: 'Princess' },
+    { value: 'Rope', label: 'Rope' },
+    { value: 'Layered', label: 'Layered' },
+    { value: 'Lariat', label: 'Lariat' },
+    { value: 'Station', label: 'Station' },
+    { value: 'Bib', label: 'Bib' },
+  ],
+  Bracelet: [
+    { value: 'Tennis', label: 'Tennis' },
+    { value: 'Line', label: 'Line' },
+    { value: 'Bangle', label: 'Bangle' },
+    { value: 'Cuff', label: 'Cuff' },
+    { value: 'Chain', label: 'Chain' },
+    { value: 'Charm', label: 'Charm' },
+    { value: 'Snake', label: 'Snake' },
+    { value: 'Box Chain', label: 'Box Chain' },
+    { value: 'Cable', label: 'Cable' },
+  ],
+  Earrings: [
+    { value: 'Stud', label: 'Stud' },
+    { value: 'Drop', label: 'Drop' },
+    { value: 'Hoop', label: 'Hoop' },
+    { value: 'Chandelier', label: 'Chandelier' },
+    { value: 'Huggie', label: 'Huggie' },
+    { value: 'Threader', label: 'Threader' },
+    { value: 'Cluster', label: 'Cluster' },
+    { value: 'Classic', label: 'Classic' },
+  ],
+  Pendant: [
+    { value: 'Solitaire', label: 'Solitaire' },
+    { value: 'Halo', label: 'Halo' },
+    { value: 'Cluster', label: 'Cluster' },
+    { value: 'Cross', label: 'Cross' },
+    { value: 'Heart', label: 'Heart' },
+    { value: 'Initial', label: 'Initial' },
+    { value: 'Bar', label: 'Bar' },
+    { value: 'Locket', label: 'Locket' },
+    { value: 'Station', label: 'Station' },
+  ],
+};
+
 // Step 1 builder: simplified type choices (maps to JewelleryType)
 export const JEWELLERY_GUIDE_TYPES = [
   { id: 'ring', label: 'Ring', value: 'Engagement Ring' },
@@ -231,9 +284,11 @@ export const EGI_LOGO = "https://www.thediamondguy.co.za/wp-content/uploads/2024
 
 export const NAV_ITEMS = [
   { id: 'Home', label: 'Home' },
+  { id: 'About', label: 'Our Story' },
   { id: 'RingBuilder', label: 'Builder' },
   { id: 'Learn', label: 'Learn' },
   { id: 'Collection', label: 'Collection' },
+  { id: 'Explore', label: 'Explore' },
   { id: 'Blog', label: 'Blog' },
   { id: 'Resources', label: 'Guides' },
   { id: 'Chatbot', label: 'Concierge' },

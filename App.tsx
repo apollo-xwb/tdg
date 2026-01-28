@@ -17,11 +17,14 @@ import FloatingConcierge from './components/FloatingConcierge';
 const Blog = lazy(() => import('./components/Blog'));
 import JewelerPortal from './components/JewelerPortal';
 import Collection from './components/Collection';
+import Explore from './components/Explore';
 import OrderTracking from './components/OrderTracking';
 import Terms from './components/Terms';
 import TutorialWizard from './components/TutorialWizard';
 import BookConsultation from './components/BookConsultation';
-import { LOGO_URL } from './constants';
+import About from './components/About';
+import { LOGO_URL, TDG_ADDRESS } from './constants';
+import RingSizeGuideModal from './components/RingSizeGuideModal';
 
 const defaultState: UserState = {
   diamondIQ: [],
@@ -52,6 +55,7 @@ const App: React.FC = () => {
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
   const [emailFlows, setEmailFlows] = useState<EmailFlow[]>([]);
   const [jewelerSettings, setJewelerSettings] = useState<JewelerSettings | null>(null);
+  const [showRingSizeGuide, setShowRingSizeGuide] = useState(false);
 
   const refreshJewelerSettings = useCallback(async () => {
     const s = await fetchJewelerSettings();
@@ -124,12 +128,13 @@ const App: React.FC = () => {
   }, [userState]);
 
   const saveDesign = useCallback(async (design: JewelleryConfig) => {
+    const withExplore = { ...design, showInExplore: design.showInExplore !== false };
     setUserState(prev => ({
       ...prev,
-      recentDesigns: [design, ...prev.recentDesigns].slice(0, 50),
+      recentDesigns: [withExplore, ...prev.recentDesigns].slice(0, 50),
       builderDraft: {}
     }));
-    await upsertDesign(design);
+    await upsertDesign(withExplore);
   }, []);
 
   const updateDraft = useCallback((draft: Partial<JewelleryConfig>) => {
@@ -185,7 +190,11 @@ const App: React.FC = () => {
   };
 
   const mainPt = isBlog || currentView !== 'Home' ? 'pt-24' : 'pt-0';
-  const logoUrl = (jewelerSettings?.logoUrl && String(jewelerSettings.logoUrl).trim()) ? jewelerSettings.logoUrl! : LOGO_URL;
+  const defaultLogo = (jewelerSettings?.logoUrl && String(jewelerSettings.logoUrl).trim()) ? jewelerSettings.logoUrl! : LOGO_URL;
+  const logoNavbar = (jewelerSettings?.logoNavbar && String(jewelerSettings.logoNavbar).trim()) ? jewelerSettings.logoNavbar! : defaultLogo;
+  const logoFooter = (jewelerSettings?.logoFooter && String(jewelerSettings.logoFooter).trim()) ? jewelerSettings.logoFooter! : defaultLogo;
+  const logoQuotes = (jewelerSettings?.logoQuotes && String(jewelerSettings.logoQuotes).trim()) ? jewelerSettings.logoQuotes! : defaultLogo;
+  const logoVault = (jewelerSettings?.logoVault && String(jewelerSettings.logoVault).trim()) ? jewelerSettings.logoVault! : defaultLogo;
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-500`}>
@@ -197,8 +206,9 @@ const App: React.FC = () => {
         currency={userState.currency}
         setCurrency={(curr) => setUserState(prev => ({ ...prev, currency: curr }))}
         onOpenTour={() => setTourOpen(true)}
+        onOpenRingSizeGuide={() => setShowRingSizeGuide(true)}
         sessionUser={sessionUser}
-        logoUrl={logoUrl}
+        logoUrl={logoNavbar}
         forceDarkNav={currentView === 'Home'}
       />
       <main className={`flex-grow pb-12 ${mainPt}`}>
@@ -208,16 +218,18 @@ const App: React.FC = () => {
           <Route path="*" element={
             <>
               {currentView === 'Home' && <Home theme={userState.theme} onStart={() => setCurrentView('RingBuilder')} onLearn={() => setCurrentView('Learn')} />}
-              {currentView === 'RingBuilder' && <RingBuilder userState={userState} onSave={saveDesign} onUpdateDraft={updateDraft} sessionUser={sessionUser} hasAuth={!!supabase} logoUrl={logoUrl} />}
+              {currentView === 'RingBuilder' && <RingBuilder userState={userState} onSave={saveDesign} onUpdateDraft={updateDraft} sessionUser={sessionUser} hasAuth={!!supabase} logoUrl={logoQuotes} onNavigateToExplore={() => handleNavTo('Explore')} />}
               {currentView === 'Learn' && <Learn onNavigate={setCurrentView} theme={userState.theme} />}
               {currentView === 'Collection' && <Collection catalogProducts={catalogProducts} addLead={addLead} setView={setCurrentView} currency={userState.currency} />}
-              {currentView === 'Resources' && <Resources logoUrl={logoUrl} />}
+              {currentView === 'Explore' && <Explore designs={userState.recentDesigns} addLead={addLead} setView={setCurrentView} currency={userState.currency} />}
+              {currentView === 'Resources' && <Resources logoUrl={logoVault} />}
               {currentView === 'Chatbot' && <Chatbot onNavigate={setCurrentView} onLeadSubmit={addLead} />}
               {currentView === 'Portal' && <Portal userState={userState} setView={setCurrentView} onNudge={handlePartnerNudge} onEditDesign={handleEditDesign} hasAuth={!!supabase} sessionUser={sessionUser} />}
               {currentView === 'JewelerPortal' && <JewelerPortal userState={userState} onUpdate={updateAllDesigns} onLeadsUpdate={(leads) => { setUserState(prev => ({ ...prev, leads })); upsertLeads(leads); }} catalogProducts={catalogProducts} onCatalogUpdate={setCatalogProducts} emailFlows={emailFlows} onEmailFlowsUpdate={setEmailFlows} jewelerSettings={jewelerSettings} onJewelerSettingsRefresh={refreshJewelerSettings} sessionUser={sessionUser} />}
-              {currentView === 'Track' && <OrderTracking designs={userState.recentDesigns} sessionUser={sessionUser} hasAuth={!!supabase} currency={userState.currency} onNavigate={handleNavTo} />}
-              {currentView === 'Book' && <BookConsultation theme={userState.theme} onNavigate={handleNavTo} openingHours={jewelerSettings?.openingHours ?? undefined} />}
-              {currentView === 'Terms' && <Terms />}
+              {currentView === 'Track' && <OrderTracking designs={userState.recentDesigns} sessionUser={sessionUser} hasAuth={!!supabase} currency={userState.currency} onNavigate={handleNavTo} googleReviewUrl={jewelerSettings?.googleReviewUrl ?? undefined} />}
+              {currentView === 'Book' && <BookConsultation theme={userState.theme} onNavigate={handleNavTo} openingHours={jewelerSettings?.openingHours ?? undefined} address={jewelerSettings?.address} />}
+              {currentView === 'Terms' && <Terms content={jewelerSettings?.termsAndConditions} />}
+              {currentView === 'About' && <About theme={userState.theme} content={jewelerSettings?.aboutUs} />}
             </>
           } />
         </Routes>
@@ -227,7 +239,8 @@ const App: React.FC = () => {
         <button onClick={() => { handleNavTo('JewelerPortal'); }} className="text-[6px] uppercase tracking-widest text-current opacity-20">Admin CRM</button>
       </div>
 
-      <Footer theme={userState.theme} onNavigate={handleNavTo} onOpenTour={() => setTourOpen(true)} hours={jewelerSettings?.openingHours ?? undefined} logoUrl={logoUrl} />
+      <Footer theme={userState.theme} onNavigate={handleNavTo} onOpenTour={() => setTourOpen(true)} onOpenRingSizeGuide={() => setShowRingSizeGuide(true)} hours={jewelerSettings?.openingHours ?? undefined} logoUrl={logoFooter} address={jewelerSettings?.address ?? TDG_ADDRESS} />
+      <RingSizeGuideModal isOpen={showRingSizeGuide} onClose={() => setShowRingSizeGuide(false)} theme={userState.theme} />
       <FloatingConcierge onNavigate={handleNavTo} />
       <TutorialWizard
         isOpen={tourOpen}

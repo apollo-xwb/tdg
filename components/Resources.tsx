@@ -52,25 +52,25 @@ const Resources: React.FC<{ logoUrl?: string }> = ({ logoUrl }) => {
     setTimeout(() => setDownloading(null), 800);
   };
 
-  const items = guides.length > 0
-    ? guides.map((g) => ({
-        id: g.id,
-        title: g.title,
-        desc: g.description,
-        url: g.downloadUrl,
-        filename: g.suggestedFilename || 'download',
-        tags: g.tags.length ? g.tags : ['PDF'],
-        icon: 'shield' as const,
-      }))
-    : DEFAULT_GUIDES.map((g) => ({
-        id: g.id,
-        title: g.title,
-        desc: g.desc,
-        url: g.url,
-        filename: g.filename,
-        tags: g.tags,
-        icon: g.icon,
-      }));
+  const defaultItems = DEFAULT_GUIDES.map((g) => ({
+    id: g.id,
+    title: g.title,
+    desc: g.desc,
+    url: g.url,
+    filename: g.filename,
+    tags: g.tags,
+    icon: g.icon,
+  }));
+  const customItems = guides.map((g) => ({
+    id: g.id,
+    title: g.title,
+    desc: g.description,
+    url: g.downloadUrl,
+    filename: g.suggestedFilename || 'download',
+    tags: g.tags.length ? g.tags : ['PDF'],
+    icon: 'shield' as const,
+  }));
+  const items = [...defaultItems, ...customItems];
 
   return (
     <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12 animate-fadeIn space-y-24">

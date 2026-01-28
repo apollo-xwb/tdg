@@ -2,12 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { UserState, JewelleryConfig, OrderStatus, Lead, CatalogProduct, LeadStatus, EmailFlow, EmailFlowTriggerType, JewelerSettings, Appointment, JewelerAvailabilitySlot, OpeningHoursEntry, VaultGuide, BlogPost } from '../types';
-import { getJewelerEmail, fetchCatalogProducts, upsertCatalogProduct, deleteCatalogProduct, fetchEmailFlows, upsertEmailFlow, deleteEmailFlow, upsertJewelerSettings, fetchAppointments, fetchJewelerAvailability, upsertJewelerAvailabilitySlot, deleteJewelerAvailabilitySlot, updateAppointment, fetchVaultGuidesAdmin, upsertVaultGuide, deleteVaultGuide, fetchBlogPostsAdmin, upsertBlogPost, deleteBlogPost } from '../lib/supabase';
+import { getJewelerEmail, supabase, fetchCatalogProducts, upsertCatalogProduct, deleteCatalogProduct, fetchEmailFlows, upsertEmailFlow, deleteEmailFlow, upsertJewelerSettings, fetchAppointments, fetchJewelerAvailability, upsertJewelerAvailabilitySlot, deleteJewelerAvailabilitySlot, updateAppointment, fetchVaultGuidesAdmin, upsertVaultGuide, deleteVaultGuide, fetchBlogPostsAdmin, upsertBlogPost, deleteBlogPost, uploadJewelerAsset } from '../lib/supabase';
 import { calculateQuotePrice } from '../lib/quotePrice';
 import { notifyClientIfRequested } from '../lib/notifyClient';
 import JewelerLogin from './JewelerLogin';
-import { Search, Edit3, Trash2, Phone, FileText, Plus, Save, X, Shield, Share2, Video, CreditCard, LayoutGrid, List, Package, BarChart3, Mail, Copy, Settings, Sparkles, Calendar, Clock, BookOpen, FolderOpen } from 'lucide-react';
-import { METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, JEWELLERY_TYPES, OPENING_HOURS } from '../constants';
+import { Search, Edit3, Trash2, Phone, FileText, Plus, Save, X, Shield, Share2, Video, CreditCard, LayoutGrid, List, Package, BarChart3, Mail, Copy, Settings, Sparkles, Calendar, Clock, BookOpen, FolderOpen, Upload } from 'lucide-react';
+import { METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, JEWELLERY_TYPES, OPENING_HOURS, DONTPAYRETAIL } from '../constants';
 import { EMAIL_FLOW_TRIGGER_LABELS, DEFAULT_EMAIL_TEMPLATES, VARIABLE_HINT, createFlowFromTemplate } from '../lib/emailFlowTemplates';
 import { DAY_NAMES } from '../lib/calendarSlots';
 
@@ -134,6 +134,24 @@ const EmailFlowsTab: React.FC<{
 
 const hasNivodaAccess = (tier: string | undefined) => tier === 'growth' || tier === 'pro';
 
+const LogoUploadButton: React.FC<{ jewelerId: string; onUpload: (url: string) => void }> = ({ jewelerId, onUpload }) => (
+  <label className="px-2 py-1 border border-white/10 text-[8px] uppercase cursor-pointer hover:bg-white/5 flex items-center gap-1 flex-shrink-0">
+    <Upload size={10} /> Upload
+    <input
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={async (e) => {
+        const f = e.target.files?.[0];
+        if (!f || !jewelerId) return;
+        const u = await uploadJewelerAsset(jewelerId, 'logos', f);
+        if (u) onUpload(u);
+        e.target.value = '';
+      }}
+    />
+  </label>
+);
+
 const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, catalogProducts = [], onCatalogUpdate, emailFlows = [], onEmailFlowsUpdate, jewelerSettings = null, onJewelerSettingsRefresh, sessionUser = null }) => {
   const jewelerEmail = getJewelerEmail();
   const isJeweler = jewelerEmail && sessionUser?.email?.toLowerCase() === jewelerEmail.toLowerCase();
@@ -153,7 +171,18 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
   const [openingHoursDraft, setOpeningHoursDraft] = useState<OpeningHoursEntry[]>(() => [...OPENING_HOURS]);
   const [savingHours, setSavingHours] = useState(false);
   const [logoUrlDraft, setLogoUrlDraft] = useState('');
+  const [logoNavbarDraft, setLogoNavbarDraft] = useState('');
+  const [logoFooterDraft, setLogoFooterDraft] = useState('');
+  const [logoQuotesDraft, setLogoQuotesDraft] = useState('');
+  const [logoVaultDraft, setLogoVaultDraft] = useState('');
   const [savingLogo, setSavingLogo] = useState(false);
+  const [uploadingGuide, setUploadingGuide] = useState(false);
+  const [termsDraft, setTermsDraft] = useState('');
+  const [savingTerms, setSavingTerms] = useState(false);
+  const [addressDraft, setAddressDraft] = useState('');
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [aboutUsDraft, setAboutUsDraft] = useState('');
+  const [savingAbout, setSavingAbout] = useState(false);
   const [vaultGuides, setVaultGuides] = useState<VaultGuide[]>([]);
   const [guideForm, setGuideForm] = useState<Partial<VaultGuide>>({ title: '', description: '', downloadUrl: '', suggestedFilename: '', tags: [], sortOrder: 0, isActive: true });
   const [editingGuideId, setEditingGuideId] = useState<string | null>(null);
@@ -174,14 +203,38 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
     fetchJewelerAvailability(jewelerEmail).then(setAvailability);
   }, [jewelerEmail]);
 
+  const [pieceBaseByTypeDraft, setPieceBaseByTypeDraft] = useState<Record<string, string>>({});
+  const [pricingMarginDraft, setPricingMarginDraft] = useState('');
+  const PIECE_BASE_TYPES = ['Engagement Ring', 'Earrings', 'Necklace', 'Bracelet', 'Wedding Band', 'Pendant', 'Ring', 'Other'] as const;
+  const [savingPricing, setSavingPricing] = useState(false);
+  const [googleReviewUrlDraft, setGoogleReviewUrlDraft] = useState('');
+  const [savingGoogleReview, setSavingGoogleReview] = useState(false);
+  const [generatingPaystackId, setGeneratingPaystackId] = useState<string | null>(null);
+
   useEffect(() => {
     if (tab === 'Settings') {
       const from = jewelerSettings?.openingHours ?? OPENING_HOURS;
       const merged = OPENING_HOURS.map(d => from.find(f => f.day === d.day) ?? { ...d });
       setOpeningHoursDraft(merged);
       setLogoUrlDraft(jewelerSettings?.logoUrl ?? '');
+      setLogoNavbarDraft(jewelerSettings?.logoNavbar ?? '');
+      setLogoFooterDraft(jewelerSettings?.logoFooter ?? '');
+      setLogoQuotesDraft(jewelerSettings?.logoQuotes ?? '');
+      setLogoVaultDraft(jewelerSettings?.logoVault ?? '');
+      setTermsDraft(jewelerSettings?.termsAndConditions ?? '');
+      setAddressDraft(jewelerSettings?.address ?? '');
+      setAboutUsDraft(jewelerSettings?.aboutUs ?? '');
+      const pr = jewelerSettings?.pricingRules;
+      setPieceBaseByTypeDraft(
+        (['Engagement Ring', 'Earrings', 'Necklace', 'Bracelet', 'Wedding Band', 'Pendant', 'Ring', 'Other'] as const).reduce(
+          (acc, t) => ({ ...acc, [t]: (pr?.pieceBaseByType?.[t] != null ? String(pr.pieceBaseByType[t]) : '') }),
+          {} as Record<string, string>
+        )
+      );
+      setPricingMarginDraft(pr?.defaultMarginPercent != null ? String(pr.defaultMarginPercent) : '');
+      setGoogleReviewUrlDraft(jewelerSettings?.googleReviewUrl ?? '');
     }
-  }, [tab, jewelerSettings?.openingHours, jewelerSettings?.logoUrl]);
+  }, [tab, jewelerSettings?.openingHours, jewelerSettings?.logoUrl, jewelerSettings?.logoNavbar, jewelerSettings?.logoFooter, jewelerSettings?.logoQuotes, jewelerSettings?.logoVault, jewelerSettings?.termsAndConditions, jewelerSettings?.address, jewelerSettings?.aboutUs, jewelerSettings?.pricingRules, jewelerSettings?.googleReviewUrl]);
 
   useEffect(() => {
     if (tab === 'Guides' && jewelerEmail) fetchVaultGuidesAdmin(jewelerEmail).then(setVaultGuides);
@@ -195,7 +248,8 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
     id: `TDG-M-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
     type: 'Engagement Ring', stoneType: 'Natural', metal: 'Platinum', shape: 'Round', carat: 1.0, qualityTier: 'Balance Size & Quality', settingStyle: 'Solitaire', stoneCategory: 'Diamond', status: 'Quoted', isApproved: false, date: new Date().toLocaleDateString(), budget: 0, engraving: ''
   });
-  const computedQuotePrice = calculateQuotePrice(newQuote, 1 + defaultMarginPercent / 100);
+  const effectiveMarginPercent = newQuote.marginPercent ?? jewelerSettings?.pricingRules?.defaultMarginPercent ?? defaultMarginPercent;
+  const computedQuotePrice = calculateQuotePrice(newQuote, 1 + effectiveMarginPercent / 100, jewelerSettings?.pricingRules ?? undefined);
 
   const handleUpdate = (id: string, updates: Partial<JewelleryConfig>) => {
     const next = userState.recentDesigns.map(d => d.id === id ? { ...d, ...updates } : d);
@@ -204,8 +258,11 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
 
   const handleMoveCard = (designId: string, newStatus: OrderStatus) => {
     const design = userState.recentDesigns.find(d => d.id === designId);
+    const now = new Date().toISOString();
     const next = userState.recentDesigns.map(d =>
-      d.id === designId ? { ...d, status: newStatus } : d
+      d.id === designId
+        ? { ...d, status: newStatus, statusUpdatedAt: now, milestoneDates: { ...(d.milestoneDates ?? {}), [newStatus]: now } }
+        : d
     );
     onUpdate(next);
     if (design?.notifyClientOnStatusChange) notifyClientIfRequested(design, newStatus);
@@ -551,12 +608,29 @@ For questions, please contact our concierge.`;
                               className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none focus:border-white/30"
                            />
                         </div>
+                        <div className="space-y-2">
+                           <label className="text-[8px] uppercase opacity-68 font-bold block">Cost (ZAR) — optional</label>
+                           <input type="number" value={design.costZAR ?? ''} onChange={e => handleUpdate(design.id, { costZAR: e.target.value === '' ? undefined : parseInt(e.target.value, 10) || 0 })} placeholder="COGS" className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50" />
+                        </div>
+                        <div className="space-y-2">
+                           <label className="text-[8px] uppercase opacity-68 font-bold block">Margin % — optional</label>
+                           <input type="number" min={0} max={200} value={design.marginPercent ?? ''} onChange={e => handleUpdate(design.id, { marginPercent: e.target.value === '' ? undefined : parseInt(e.target.value, 10) ?? 0 })} placeholder="Override" className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50" />
+                        </div>
                      </div>
                      <div className="space-y-4">
                         <p className="text-[9px] uppercase opacity-68 font-bold">Status & Links</p>
-                        <select value={design.status} onChange={e => { const s = e.target.value as OrderStatus; handleUpdate(design.id, { status: s }); if (design.notifyClientOnStatusChange) notifyClientIfRequested(design, s); }} className="w-full bg-black/50 border border-white/10 p-3 text-[10px] uppercase tracking-widest">
+                        <select value={design.status} onChange={e => { const s = e.target.value as OrderStatus; const now = new Date().toISOString(); handleUpdate(design.id, { status: s, statusUpdatedAt: now, milestoneDates: { ...(design.milestoneDates ?? {}), [s]: now } }); if (design.notifyClientOnStatusChange) notifyClientIfRequested(design, s); }} className="w-full bg-black/50 border border-white/10 p-3 text-[10px] uppercase tracking-widest">
                            {STATUS_FLOW.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
+                        <div className="mt-4 space-y-2">
+                          <p className="text-[8px] uppercase opacity-68 font-bold">Milestone dates (optional)</p>
+                          {(['Deposit Paid', 'Sourcing Stone', 'In Production', 'Ready', 'Collected'] as const).map(s => (
+                            <div key={s} className="flex items-center gap-2">
+                              <span className="w-28 text-[9px] opacity-78 truncate">{s}</span>
+                              <input type="date" value={(design.milestoneDates?.[s] ?? '').slice(0, 10)} onChange={e => { const raw = e.target.value; const next = { ...(design.milestoneDates ?? {}) }; if (raw) next[s] = `${raw}T12:00:00.000Z`; else delete next[s]; handleUpdate(design.id, { milestoneDates: next }); }} className="flex-1 max-w-[140px] bg-black/50 border border-white/10 p-1.5 text-[9px] focus:outline-none" />
+                            </div>
+                          ))}
+                        </div>
                         <div className="space-y-2 mt-4">
                            <label className="text-[8px] uppercase opacity-68 font-bold block">Video Link</label>
                            <input 
@@ -579,14 +653,46 @@ For questions, please contact our concierge.`;
                         </div>
                         <div className="space-y-2">
                            <label className="text-[8px] uppercase opacity-68 font-bold block">Payment Link *</label>
-                           <input 
-                              type="text" 
-                              value={design.paymentLink || ''} 
-                              onChange={e => handleUpdate(design.id, {paymentLink: e.target.value})}
-                              placeholder="https://..."
-                              className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none focus:border-white/30"
-                           />
-                           <p className="text-[7px] opacity-55">Required for approval</p>
+                           <div className="flex flex-wrap items-center gap-2">
+                             <input 
+                                type="text" 
+                                value={design.paymentLink || ''} 
+                                onChange={e => handleUpdate(design.id, {paymentLink: e.target.value})}
+                                placeholder="https://... or generate below"
+                                className="flex-1 min-w-[200px] bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none focus:border-white/30"
+                             />
+                             <button
+                               type="button"
+                               disabled={!design.email?.trim() || !(design.priceZAR && design.priceZAR > 0) || generatingPaystackId === design.id}
+                               onClick={async () => {
+                                 if (!supabase || !design.email?.trim() || !(design.priceZAR && design.priceZAR > 0)) return;
+                                 setGeneratingPaystackId(design.id);
+                                 try {
+                                   const { data, error } = await supabase.functions.invoke('create-paystack-link', {
+                                     body: {
+                                       design_id: design.id,
+                                       amount_zar: Math.round((design.priceZAR || 0) * 0.5),
+                                       email: design.email.trim(),
+                                       callback_url: `${window.location.origin}${window.location.pathname}`
+                                     }
+                                   });
+                                   if (error) throw error;
+                                   const url = (data as { url?: string })?.url;
+                                   if (url) handleUpdate(design.id, { paymentLink: url });
+                                   else alert('No link returned. Configure PAYSTACK_SECRET_KEY in Edge Function secrets.');
+                                 } catch (e) {
+                                   console.warn(e);
+                                   alert('Failed to create Paystack link. Check Edge Function and secrets.');
+                                 } finally {
+                                   setGeneratingPaystackId(null);
+                                 }
+                               }}
+                               className="px-3 py-2 border border-emerald-500/40 text-emerald-400 text-[9px] uppercase tracking-widest hover:bg-emerald-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                             >
+                               {generatingPaystackId === design.id ? '…' : 'Paystack 50%'}
+                             </button>
+                           </div>
+                           <p className="text-[7px] opacity-55">Required for approval. Use Paystack for real payments; webhook will set status to Deposit Paid.</p>
                         </div>
                         <label className="flex items-center gap-2 text-[8px] uppercase opacity-68 font-bold mt-4">
                           <input type="checkbox" checked={!!design.notifyClientOnStatusChange} onChange={e => handleUpdate(design.id, { notifyClientOnStatusChange: e.target.checked })} />
@@ -650,8 +756,8 @@ For questions, please contact our concierge.`;
             <p className="text-[10px] opacity-68">Set specs and default margin. Price is calculated from your formula and margin.</p>
             <div className="grid md:grid-cols-2 gap-8">
               <div className="space-y-4">
-                <label className="text-[8px] uppercase opacity-68 font-bold block">Default margin %</label>
-                <input type="number" min={0} max={200} value={defaultMarginPercent} onChange={e => { const v = parseInt(e.target.value) || 0; setDefaultMarginPercent(v); localStorage.setItem('jeweler_margin_pct', String(v)); }} className="w-24 bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none" />
+                <label className="text-[8px] uppercase opacity-68 font-bold block">Margin % (uses Settings default when saved)</label>
+                <input type="number" min={0} max={200} value={effectiveMarginPercent} onChange={e => { const v = parseInt(e.target.value) || 0; setDefaultMarginPercent(v); localStorage.setItem('jeweler_margin_pct', String(v)); }} className="w-24 bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none" />
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Type</label>
                 <select value={newQuote.type || 'Engagement Ring'} onChange={e => setNewQuote(q => ({ ...q, type: e.target.value as any }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
                   {JEWELLERY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -706,7 +812,7 @@ For questions, please contact our concierge.`;
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Reference</label>
                 <input value={newQuote.id || ''} onChange={e => setNewQuote(q => ({ ...q, id: e.target.value }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none font-mono" placeholder="e.g. TDG-M-XXXXX" />
                 <div className="pt-4 border-t border-white/10">
-                  <p className="text-[9px] uppercase opacity-68 font-bold">Calculated price (incl. {defaultMarginPercent}% margin)</p>
+                  <p className="text-[9px] uppercase opacity-68 font-bold">Calculated price (incl. {effectiveMarginPercent}% margin)</p>
                   <p className="text-2xl font-thin">ZAR {computedQuotePrice.toLocaleString()}</p>
                 </div>
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Override price (ZAR)</label>
@@ -720,34 +826,100 @@ For questions, please contact our concierge.`;
         )}
 
         {tab === 'Analytics' && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fadeIn">
-            <div className="glass border border-white/10 rounded-sm p-6">
-              <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Total leads</p>
-              <p className="text-4xl font-thin">{userState.leads.length}</p>
-            </div>
-            <div className="glass border border-white/10 rounded-sm p-6">
-              <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Leads by source</p>
-              <div className="mt-2 space-y-1 text-[10px] uppercase">
-                {(['Collection Enquiry', 'Chatbot', 'Ring Builder', 'Partner Nudge', 'Manual'] as const).map(src => {
-                  const n = userState.leads.filter(l => l.source === src).length;
-                  return n > 0 ? <div key={src} className="flex justify-between"><span className="opacity-78">{src}</span><span>{n}</span></div> : null;
-                })}
-                {userState.leads.filter(l => !l.source).length > 0 && <div className="flex justify-between"><span className="opacity-78">—</span><span>{userState.leads.filter(l => !l.source).length}</span></div>}
+          <div className="space-y-8 animate-fadeIn">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="glass border border-white/10 rounded-sm p-6">
+                <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Total leads</p>
+                <p className="text-4xl font-thin">{userState.leads.length}</p>
+              </div>
+              <div className="glass border border-white/10 rounded-sm p-6">
+                <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Leads by source</p>
+                <div className="mt-2 space-y-1 text-[10px] uppercase">
+                  {(['Chatbot', 'Partner Nudge', 'Ring Builder', 'Collection Enquiry', 'Explore', 'Manual'] as const).map(src => {
+                    const n = userState.leads.filter(l => l.source === src).length;
+                    return n > 0 ? <div key={src} className="flex justify-between"><span className="opacity-78">{src}</span><span>{n}</span></div> : null;
+                  })}
+                  {userState.leads.filter(l => !l.source).length > 0 && <div className="flex justify-between"><span className="opacity-78">—</span><span>{userState.leads.filter(l => !l.source).length}</span></div>}
+                </div>
+              </div>
+              <div className="glass border border-white/10 rounded-sm p-6">
+                <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Orders by status</p>
+                <div className="mt-2 space-y-1 text-[10px] uppercase max-h-32 overflow-y-auto">
+                  {STATUS_FLOW.map(s => {
+                    const n = userState.recentDesigns.filter(d => d.status === s).length;
+                    return <div key={s} className="flex justify-between"><span className="opacity-78 truncate">{s}</span><span>{n}</span></div>;
+                  })}
+                </div>
+              </div>
+              <div className="glass border border-white/10 rounded-sm p-6">
+                <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Revenue (pipeline)</p>
+                <p className="text-4xl font-thin">ZAR {(userState.recentDesigns.filter(d => ['Deposit Paid', 'Sourcing Stone', 'In Production', 'Final Polish', 'Ready', 'Collected'].includes(d.status)).reduce((a, d) => a + (d.priceZAR ?? 0), 0)).toLocaleString()}</p>
+                <p className="text-[8px] opacity-55 mt-1">Sum of orders past Quoted</p>
               </div>
             </div>
             <div className="glass border border-white/10 rounded-sm p-6">
-              <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Orders by status</p>
-              <div className="mt-2 space-y-1 text-[10px] uppercase">
-                {STATUS_FLOW.map(s => {
-                  const n = userState.recentDesigns.filter(d => d.status === s).length;
-                  return <div key={s} className="flex justify-between"><span className="opacity-78 truncate">{s}</span><span>{n}</span></div>;
-                })}
+              <p className="text-[9px] uppercase opacity-68 font-bold mb-3">Conversion by source</p>
+              <p className="text-[8px] opacity-55 mb-4">Leads → Quoted (pipeline started) → Won (Deposit Paid or later)</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px] uppercase">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left py-2 opacity-78 font-bold">Source</th>
+                      <th className="text-right py-2 opacity-78 font-bold">Leads</th>
+                      <th className="text-right py-2 opacity-78 font-bold">Quoted</th>
+                      <th className="text-right py-2 opacity-78 font-bold">Won</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(['Chatbot', 'Partner Nudge', 'Ring Builder', 'Collection Enquiry', 'Explore', 'Manual'] as const).map(src => {
+                      const leads = userState.leads.filter(l => l.source === src);
+                      const quoted = leads.filter(l => l.status === 'Quoted' || l.linkedDesignId);
+                      const won = quoted.filter(l => {
+                        const des = userState.recentDesigns.find(d => d.id === l.linkedDesignId);
+                        return des && ['Deposit Paid', 'Sourcing Stone', 'In Production', 'Final Polish', 'Ready', 'Collected'].includes(des.status);
+                      });
+                      return (
+                        <tr key={src} className="border-b border-white/5">
+                          <td className="py-2 opacity-90">{src}</td>
+                          <td className="text-right py-2">{leads.length}</td>
+                          <td className="text-right py-2">{quoted.length}</td>
+                          <td className="text-right py-2">{won.length}</td>
+                        </tr>
+                      );
+                    })}
+                    {userState.leads.filter(l => !l.source).length > 0 && (
+                      <tr className="border-b border-white/5">
+                        <td className="py-2 opacity-90">—</td>
+                        <td className="text-right py-2">{userState.leads.filter(l => !l.source).length}</td>
+                        <td className="text-right py-2">{userState.leads.filter(l => !l.source && (l.status === 'Quoted' || l.linkedDesignId)).length}</td>
+                        <td className="text-right py-2">{userState.leads.filter(l => !l.source && l.linkedDesignId && userState.recentDesigns.some(d => d.id === l.linkedDesignId && ['Deposit Paid', 'Sourcing Stone', 'In Production', 'Final Polish', 'Ready', 'Collected'].includes(d.status))).length}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
             <div className="glass border border-white/10 rounded-sm p-6">
-              <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Revenue (pipeline)</p>
-              <p className="text-4xl font-thin">ZAR {(userState.recentDesigns.filter(d => ['Deposit Paid', 'Sourcing Stone', 'In Production', 'Final Polish', 'Ready', 'Collected'].includes(d.status)).reduce((a, d) => a + (d.priceZAR ?? 0), 0)).toLocaleString()}</p>
-              <p className="text-[8px] opacity-55 mt-1">Sum of orders past Quoted</p>
+              <p className="text-[9px] uppercase opacity-68 font-bold mb-3">Popular specs</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px] uppercase">
+                <div><span className="opacity-55 block">Metal</span>{Object.entries(userState.recentDesigns.reduce<Record<string, number>>((a, d) => { const m = d.metal || '—'; a[m] = (a[m] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => <span key={k} className="block">{k} ({v})</span>)}</div>
+                <div><span className="opacity-55 block">Shape</span>{Object.entries(userState.recentDesigns.reduce<Record<string, number>>((a, d) => { const s = d.shape || '—'; a[s] = (a[s] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => <span key={k} className="block">{k} ({v})</span>)}</div>
+                <div><span className="opacity-55 block">Quality</span>{Object.entries(userState.recentDesigns.reduce<Record<string, number>>((a, d) => { const q = d.qualityTier || '—'; a[q] = (a[q] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => <span key={k} className="block truncate">{k} ({v})</span>)}</div>
+                <div><span className="opacity-55 block">Carat (top)</span>{[...new Set(userState.recentDesigns.map(d => d.carat))].filter(Boolean).sort((a, b) => (b ?? 0) - (a ?? 0)).slice(0, 3).map(c => <span key={c} className="block">{c} ct</span>)}</div>
+              </div>
+            </div>
+            <div className="glass border border-white/10 rounded-sm p-6">
+              <p className="text-[9px] uppercase opacity-68 font-bold mb-2">Stock needed (Sourcing Stone)</p>
+              <p className="text-[8px] opacity-55 mb-3">{hasNivodaAccess(jewelerSettings?.packageTier) && jewelerSettings?.nivodaSourcingEnabled ? 'Use Nivoda for live sourcing.' : 'Orders in Sourcing Stone — upgrade for Live Diamond Sourcing (Nivoda).'}</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {userState.recentDesigns.filter(d => d.status === 'Sourcing Stone').length === 0 && <p className="text-[9px] opacity-60">None</p>}
+                {userState.recentDesigns.filter(d => d.status === 'Sourcing Stone').map(d => (
+                  <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 border-b border-white/5 text-[9px]">
+                    <span className="font-mono opacity-90">{d.id}</span>
+                    <span className="opacity-78">{d.shape ?? '—'} • {(d.carat ?? 0)} ct • {d.qualityTier ?? '—'} • {d.metal ?? '—'}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -921,7 +1093,7 @@ For questions, please contact our concierge.`;
           <div className="space-y-8 max-w-3xl">
             <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
               <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4">Digital Vault / Guides</h2>
-              <p className="text-[9px] opacity-65">Items shown to clients on the Guides (Digital Vault) page. Add PDF or asset links; clients can download. When you add at least one, only these items are shown (otherwise the default Ring Guide and Wedding Template are shown).</p>
+              <p className="text-[9px] opacity-65">The Ring Guide and Wedding Template are always shown. Add your own guides below; upload a file (PDF, Word, etc.) or paste a URL. Clients see default + your custom guides on the Digital Vault.</p>
               {(editingGuideId !== null || addingGuide || vaultGuides.length === 0) && (
                 <div className="space-y-4 pt-4">
                   <div className="grid gap-4">
@@ -934,8 +1106,33 @@ For questions, please contact our concierge.`;
                       <textarea value={guideForm.description ?? ''} onChange={e => setGuideForm(f => ({ ...f, description: e.target.value }))} rows={2} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none resize-y" placeholder="Short description for the card" />
                     </div>
                     <div>
-                      <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Download URL</label>
-                      <input value={guideForm.downloadUrl ?? ''} onChange={e => setGuideForm(f => ({ ...f, downloadUrl: e.target.value }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none" placeholder="https://... or /path/to/file.pdf" />
+                      <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Download file or URL</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input value={guideForm.downloadUrl ?? ''} onChange={e => setGuideForm(f => ({ ...f, downloadUrl: e.target.value }))} className="flex-1 min-w-[180px] bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none" placeholder="https://... or upload below" />
+                        <label className="px-3 py-2 border border-white/20 text-[9px] uppercase tracking-wider cursor-pointer hover:bg-white/5 flex items-center gap-2 flex-shrink-0 disabled:opacity-50">
+                          <Upload size={12} /> {uploadingGuide ? 'Uploading…' : 'Upload file'}
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.odt,.ods,.odp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv"
+                            className="hidden"
+                            disabled={uploadingGuide}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const jid = jewelerEmail || sessionUser?.email || '';
+                              if (!jid) return;
+                              setUploadingGuide(true);
+                              const url = await uploadJewelerAsset(jid, 'guides', file);
+                              if (url) {
+                                setGuideForm(f => ({ ...f, downloadUrl: url, suggestedFilename: f.suggestedFilename || file.name }));
+                              }
+                              setUploadingGuide(false);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <p className="text-[8px] opacity-50 mt-1">PDF, Word, Excel, PowerPoint, text, CSV, etc.</p>
                     </div>
                     <div>
                       <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Suggested filename (optional)</label>
@@ -986,7 +1183,7 @@ For questions, please contact our concierge.`;
                 </button>
               )}
               <div className="border-t border-white/10 pt-6 mt-6 space-y-3">
-                {vaultGuides.length === 0 && !editingGuideId && !addingGuide && <p className="text-[9px] opacity-55">No custom guides yet. Add one above to replace the default Ring Guide and Wedding Template on the Guides page.</p>}
+                {vaultGuides.length === 0 && !editingGuideId && !addingGuide && <p className="text-[9px] opacity-55">No custom guides yet. Add one above; the default Ring Guide and Wedding Template always appear together with yours.</p>}
                 {vaultGuides.map((g) => (
                   <div key={g.id} className="flex justify-between items-start gap-4 py-3 border-b border-white/5">
                     <div>
@@ -1099,10 +1296,22 @@ For questions, please contact our concierge.`;
           <div className="space-y-10 max-w-2xl">
             <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
               <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4">Site logo</h2>
-              <p className="text-[9px] opacity-65">Logo used site-wide: navbar, footer, quote PDFs, watermarks, and Guides. Use a direct image URL (e.g. from your site or Supabase Storage). Leave blank to keep the default.</p>
+              <p className="text-[9px] opacity-65">Default logo is used wherever a placement override is not set. Upload an image or paste a URL. You can set a different logo per placement below.</p>
+
+              <div>
+                <p className="text-[8px] uppercase opacity-68 font-bold mb-2">Current active logo (default)</p>
+                <div className="flex items-center gap-4 flex-wrap">
+                  {(jewelerSettings?.logoUrl && String(jewelerSettings.logoUrl).trim()) ? (
+                    <img src={jewelerSettings.logoUrl.trim()} alt="Current logo" className="h-10 object-contain object-left max-w-[160px] bg-white/5 rounded border border-white/10" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  ) : (
+                    <span className="text-[9px] opacity-50">Using site default</span>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-end gap-4">
                 <div className="flex-1 min-w-[200px]">
-                  <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Logo URL</label>
+                  <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Default logo URL</label>
                   <input
                     type="url"
                     value={logoUrlDraft}
@@ -1111,6 +1320,23 @@ For questions, please contact our concierge.`;
                     className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50"
                   />
                 </div>
+                <label className="px-4 py-2 border border-white/20 text-[10px] uppercase tracking-widest cursor-pointer hover:bg-white/5 flex items-center gap-2">
+                  <Upload size={14} /> Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const jid = jewelerEmail || sessionUser?.email || '';
+                      if (!jid) return;
+                      const url = await uploadJewelerAsset(jid, 'logos', file);
+                      if (url) setLogoUrlDraft(url);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
                 <button
                   type="button"
                   disabled={savingLogo}
@@ -1118,21 +1344,119 @@ For questions, please contact our concierge.`;
                     const jid = jewelerEmail || sessionUser?.email || '';
                     if (!jid) return;
                     setSavingLogo(true);
-                    await upsertJewelerSettings({ jewelerId: jid, logoUrl: logoUrlDraft.trim() || null });
+                    await upsertJewelerSettings({
+                      jewelerId: jid,
+                      logoUrl: logoUrlDraft.trim() || null,
+                      logoNavbar: logoNavbarDraft.trim() || null,
+                      logoFooter: logoFooterDraft.trim() || null,
+                      logoQuotes: logoQuotesDraft.trim() || null,
+                      logoVault: logoVaultDraft.trim() || null,
+                    });
                     await onJewelerSettingsRefresh?.();
                     setSavingLogo(false);
                   }}
                   className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 disabled:opacity-50"
                 >
-                  <Save size={14} /> {savingLogo ? 'Saving…' : 'Save logo'}
+                  <Save size={14} /> {savingLogo ? 'Saving…' : 'Save all logos'}
                 </button>
               </div>
-              {logoUrlDraft.trim() && (
-                <div className="flex items-center gap-3 pt-2">
-                  <span className="text-[8px] uppercase opacity-50">Preview</span>
-                  <img src={logoUrlDraft.trim()} alt="Logo preview" className="h-8 object-contain object-left max-w-[120px] bg-white/5 rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+
+              <div className="pt-4 border-t border-white/10">
+                <p className="text-[8px] uppercase opacity-68 font-bold mb-3">Where the logo is used — set a different logo per location (optional)</p>
+                <ul className="space-y-3 text-[9px] opacity-80">
+                  <li className="flex flex-wrap items-center gap-2">
+                    <span className="w-28 uppercase font-bold">Navbar</span>
+                    <input type="url" value={logoNavbarDraft} onChange={e => setLogoNavbarDraft(e.target.value)} placeholder="Override or leave empty" className="flex-1 min-w-[140px] bg-black/50 border border-white/10 p-1.5 text-[10px] focus:outline-none placeholder:opacity-50" />
+                    <LogoUploadButton jewelerId={jewelerEmail || sessionUser?.email || ''} onUpload={setLogoNavbarDraft} />
+                  </li>
+                  <li className="flex flex-wrap items-center gap-2">
+                    <span className="w-28 uppercase font-bold">Footer</span>
+                    <input type="url" value={logoFooterDraft} onChange={e => setLogoFooterDraft(e.target.value)} placeholder="Override or leave empty" className="flex-1 min-w-[140px] bg-black/50 border border-white/10 p-1.5 text-[10px] focus:outline-none placeholder:opacity-50" />
+                    <LogoUploadButton jewelerId={jewelerEmail || sessionUser?.email || ''} onUpload={setLogoFooterDraft} />
+                  </li>
+                  <li className="flex flex-wrap items-center gap-2">
+                    <span className="w-28 uppercase font-bold">Quote PDFs</span>
+                    <input type="url" value={logoQuotesDraft} onChange={e => setLogoQuotesDraft(e.target.value)} placeholder="Override or leave empty" className="flex-1 min-w-[140px] bg-black/50 border border-white/10 p-1.5 text-[10px] focus:outline-none placeholder:opacity-50" />
+                    <LogoUploadButton jewelerId={jewelerEmail || sessionUser?.email || ''} onUpload={setLogoQuotesDraft} />
+                  </li>
+                  <li className="flex flex-wrap items-center gap-2">
+                    <span className="w-28 uppercase font-bold">Digital Vault</span>
+                    <input type="url" value={logoVaultDraft} onChange={e => setLogoVaultDraft(e.target.value)} placeholder="Override or leave empty" className="flex-1 min-w-[140px] bg-black/50 border border-white/10 p-1.5 text-[10px] focus:outline-none placeholder:opacity-50" />
+                    <LogoUploadButton jewelerId={jewelerEmail || sessionUser?.email || ''} onUpload={setLogoVaultDraft} />
+                  </li>
+                </ul>
+                <p className="text-[8px] opacity-50 mt-2">If a placement is left empty, the default logo above is used there.</p>
+              </div>
+            </div>
+
+            <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
+              <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4">Pricing & margin</h2>
+              <p className="text-[9px] opacity-65">Piece base is the starting amount (ZAR) for that jewellery type before metal, setting style, and stone. Used in Manual Quote and the builder. Loose Stone uses stone-only pricing. Blank = platform default (e.g. 3,800 for rings).</p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {PIECE_BASE_TYPES.map(t => (
+                  <div key={t}>
+                    <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">{t} base (ZAR)</label>
+                    <input type="number" min={0} value={pieceBaseByTypeDraft[t] ?? ''} onChange={e => setPieceBaseByTypeDraft(prev => ({ ...prev, [t]: e.target.value }))} placeholder="default" className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50" />
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-end gap-4 pt-4 border-t border-white/10">
+                <div>
+                  <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Default margin %</label>
+                  <p className="text-[8px] opacity-55 mb-1">Markup on the calculated total (piece base + metal + setting + stone).</p>
+                  <input type="number" min={0} max={200} value={pricingMarginDraft} onChange={e => setPricingMarginDraft(e.target.value)} placeholder="e.g. 25" className="w-24 bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50" />
                 </div>
-              )}
+                <button type="button" disabled={savingPricing} onClick={async () => {
+                  const jid = jewelerEmail || sessionUser?.email || '';
+                  if (!jid) return;
+                  setSavingPricing(true);
+                  const pieceBaseByType: Record<string, number> = {};
+                  PIECE_BASE_TYPES.forEach(t => {
+                    const v = (pieceBaseByTypeDraft[t] ?? '').trim();
+                    if (v) { const n = parseInt(v, 10); if (!isNaN(n) && n >= 0) pieceBaseByType[t] = n; }
+                  });
+                  const defaultMarginPercent = pricingMarginDraft.trim() ? parseInt(pricingMarginDraft, 10) : undefined;
+                  const hasAny = Object.keys(pieceBaseByType).length > 0 || defaultMarginPercent != null;
+                  const next = { ...(jewelerSettings?.pricingRules ?? {}), pieceBaseByType, ...(defaultMarginPercent != null && { defaultMarginPercent }) };
+                  await upsertJewelerSettings({ jewelerId: jid, pricingRules: hasAny ? next : null });
+                  await onJewelerSettingsRefresh?.();
+                  setSavingPricing(false);
+                }} className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 disabled:opacity-50">
+                  <Save size={14} /> {savingPricing ? 'Saving…' : 'Save pricing'}
+                </button>
+              </div>
+            </div>
+
+            <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
+              <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4">Visit address</h2>
+              <p className="text-[9px] opacity-65">Shown in the footer and on the Book a visit page (map and label). Use your full street address for the map.</p>
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Address</label>
+                  <input
+                    type="text"
+                    value={addressDraft}
+                    onChange={(e) => setAddressDraft(e.target.value)}
+                    placeholder="e.g. Suite 303, The Foundry, 18 Cardiff St, De Waterkant, Cape Town, 8001"
+                    className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={savingAddress}
+                  onClick={async () => {
+                    const jid = jewelerEmail || sessionUser?.email || '';
+                    if (!jid) return;
+                    setSavingAddress(true);
+                    await upsertJewelerSettings({ jewelerId: jid, address: addressDraft.trim() || null });
+                    await onJewelerSettingsRefresh?.();
+                    setSavingAddress(false);
+                  }}
+                  className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Save size={14} /> {savingAddress ? 'Saving…' : 'Save address'}
+                </button>
+              </div>
             </div>
 
             <div className="glass border border-white/10 rounded-sm p-8 space-y-8">
@@ -1235,6 +1559,81 @@ For questions, please contact our concierge.`;
               >
                 <Save size={14} /> {savingHours ? 'Saving…' : 'Save operational hours'}
               </button>
+            </div>
+
+            <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
+              <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4">Terms & conditions</h2>
+              <p className="text-[9px] opacity-65">Shown on the public Terms page. When empty, the default terms are shown. Changes appear in real time once saved.</p>
+              <textarea
+                value={termsDraft}
+                onChange={(e) => setTermsDraft(e.target.value)}
+                placeholder="Paste or type your terms here. Leave blank to use the default."
+                rows={12}
+                className="w-full bg-black/50 border border-white/10 p-3 text-[10px] focus:outline-none focus:border-white/30 placeholder:opacity-50 resize-y min-h-[200px]"
+              />
+              <button
+                type="button"
+                disabled={savingTerms}
+                onClick={async () => {
+                  const jid = jewelerEmail || sessionUser?.email || '';
+                  if (!jid) return;
+                  setSavingTerms(true);
+                  await upsertJewelerSettings({ jewelerId: jid, termsAndConditions: termsDraft.trim() || null });
+                  await onJewelerSettingsRefresh?.();
+                  setSavingTerms(false);
+                }}
+                className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 disabled:opacity-50"
+              >
+                <Save size={14} /> {savingTerms ? 'Saving…' : 'Save terms'}
+              </button>
+            </div>
+
+            <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
+              <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4">Our Story / About us</h2>
+              <p className="text-[9px] opacity-65">Shown on the Our Story page. When empty, the default story (founder, {DONTPAYRETAIL}, ethics, Google reviews) is shown. Changes appear as soon as you save.</p>
+              <textarea
+                value={aboutUsDraft}
+                onChange={(e) => setAboutUsDraft(e.target.value)}
+                placeholder="Paste or write your own about us text. Leave blank to use the default."
+                rows={10}
+                className="w-full bg-black/50 border border-white/10 p-3 text-[10px] focus:outline-none focus:border-white/30 placeholder:opacity-50 resize-y min-h-[180px]"
+              />
+              <button
+                type="button"
+                disabled={savingAbout}
+                onClick={async () => {
+                  const jid = jewelerEmail || sessionUser?.email || '';
+                  if (!jid) return;
+                  setSavingAbout(true);
+                  await upsertJewelerSettings({ jewelerId: jid, aboutUs: aboutUsDraft.trim() || null });
+                  await onJewelerSettingsRefresh?.();
+                  setSavingAbout(false);
+                }}
+                className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 disabled:opacity-50"
+              >
+                <Save size={14} /> {savingAbout ? 'Saving…' : 'Save Our Story'}
+              </button>
+            </div>
+
+            <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
+              <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4">Google review link</h2>
+              <p className="text-[9px] opacity-65">Optional. When set, clients can be prompted after collection/delivery to leave a review.</p>
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">URL</label>
+                  <input type="url" value={googleReviewUrlDraft} onChange={e => setGoogleReviewUrlDraft(e.target.value)} placeholder="https://g.page/r/..." className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50" />
+                </div>
+                <button type="button" disabled={savingGoogleReview} onClick={async () => {
+                  const jid = jewelerEmail || sessionUser?.email || '';
+                  if (!jid) return;
+                  setSavingGoogleReview(true);
+                  await upsertJewelerSettings({ jewelerId: jid, googleReviewUrl: googleReviewUrlDraft.trim() || null });
+                  await onJewelerSettingsRefresh?.();
+                  setSavingGoogleReview(false);
+                }} className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 disabled:opacity-50">
+                  <Save size={14} /> {savingGoogleReview ? 'Saving…' : 'Save'}
+                </button>
+              </div>
             </div>
           </div>
         )}

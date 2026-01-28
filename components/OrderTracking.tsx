@@ -1,10 +1,20 @@
 
 import React, { useState } from 'react';
 import type { JewelleryConfig, OrderStatus } from '../types';
-import { Search, Package, Gem, Truck, CheckCircle } from 'lucide-react';
+import { Search, Package, Gem, Truck, CheckCircle, FileText, Video, Star } from 'lucide-react';
 import { EXCHANGE_RATES } from '../constants';
 
 const ORDER_STATUS_FLOW: OrderStatus[] = ['Quoted', 'Approved', 'Deposit Paid', 'Sourcing Stone', 'In Production', 'Final Polish', 'Ready', 'Collected'];
+
+function formatMilestone(iso?: string): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return '';
+  }
+}
 
 interface OrderTrackingProps {
   designs: JewelleryConfig[];
@@ -12,6 +22,7 @@ interface OrderTrackingProps {
   hasAuth?: boolean;
   currency?: string;
   onNavigate?: (view: 'Portal' | 'Chatbot') => void;
+  googleReviewUrl?: string | null;
 }
 
 const OrderTracking: React.FC<OrderTrackingProps> = ({
@@ -19,7 +30,8 @@ const OrderTracking: React.FC<OrderTrackingProps> = ({
   sessionUser = null,
   hasAuth = false,
   currency = 'ZAR',
-  onNavigate
+  onNavigate,
+  googleReviewUrl
 }) => {
   const [orderId, setOrderId] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -118,11 +130,41 @@ const OrderTracking: React.FC<OrderTrackingProps> = ({
                     <p className="text-[10px] text-gray-500 uppercase mt-0.5 tracking-tighter">
                       {completed ? (i < currentIdx ? 'Done' : 'In progress') : 'Pending'}
                     </p>
+                    {design.milestoneDates?.[step] && (
+                      <p className="text-[10px] text-gray-500 mt-0.5">{formatMilestone(design.milestoneDates[step])}</p>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
+
+          {(design.certLink || design.videoLink) && (
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3">Documents</p>
+              <div className="flex flex-wrap gap-3">
+                {design.certLink && (
+                  <a href={design.certLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 border border-white/20 text-[10px] uppercase tracking-widest hover:bg-white/5">
+                    <FileText size={14} /> Certificate
+                  </a>
+                )}
+                {design.videoLink && (
+                  <a href={design.videoLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 border border-white/20 text-[10px] uppercase tracking-widest hover:bg-white/5">
+                    <Video size={14} /> Video
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {googleReviewUrl && (design.status === 'Collected' || design.status === 'Ready') && (
+            <div className="mt-8 pt-6 border-t border-white/10 text-center">
+              <p className="text-sm font-light mb-3">Loved your piece? Leave us a review.</p>
+              <a href={googleReviewUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-6 py-3 bg-white text-black text-[10px] uppercase tracking-widest font-semibold hover:bg-gray-200">
+                <Star size={14} /> Leave a Google review
+              </a>
+            </div>
+          )}
 
           {onNavigate && (
             <div className="mt-10 pt-6 border-t border-white/10 flex flex-wrap gap-4">

@@ -3,7 +3,8 @@ import { getJewelerEmail } from '../lib/supabase';
 import { fetchJewelerAvailability, fetchAppointments, createAppointment } from '../lib/supabase';
 import { getAvailableSlotsForDate } from '../lib/calendarSlots';
 import type { JewelerAvailabilitySlot, Appointment, OpeningHoursEntry } from '../types';
-import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Star, Navigation } from 'lucide-react';
+import { TDG_ADDRESS, GOOGLE_RATING, GOOGLE_REVIEW_COUNT, GOOGLE_REVIEW_URL } from '../constants';
 
 function openingHoursToSlots(hours: OpeningHoursEntry[] | null | undefined): JewelerAvailabilitySlot[] {
   if (!hours?.length) return [];
@@ -24,10 +25,26 @@ interface BookConsultationProps {
   onNavigate?: (view: string) => void;
   /** Store hours used when jeweler has no custom availability slots. */
   openingHours?: OpeningHoursEntry[] | null;
+  /** Visit address for map and label. Defaults to TDG_ADDRESS when not set. */
+  address?: string | null;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** Quick-choice options for "what the meeting is about" – cover typical jeweler visits */
+const MEETING_TOPICS: string[] = [
+  'Engagement ring consultation',
+  'Wedding bands',
+  'Stone viewing / diamond selection',
+  'Custom design consultation',
+  'Ring resize or repair',
+  'Necklace, bracelet or earrings',
+  'Quote discussion / Ring Builder follow-up',
+  'Valuation or insurance',
+  'Remount or setting change',
+  'Other',
+];
 
 function buildMonthGrid(year: number, month: number): (number | null)[][] {
   const first = new Date(year, month, 1);
@@ -54,7 +71,8 @@ function isPast(year: number, month: number, day: number): boolean {
   return d < t;
 }
 
-const BookConsultation: React.FC<BookConsultationProps> = ({ theme = 'dark', onNavigate, openingHours }) => {
+const BookConsultation: React.FC<BookConsultationProps> = ({ theme = 'dark', onNavigate, openingHours, address }) => {
+  const visitAddress = address ?? TDG_ADDRESS;
   const jewelerId = getJewelerEmail();
   const today = new Date();
   const [viewMonth, setViewMonth] = useState(() => ({ year: today.getFullYear(), month: today.getMonth() }));
@@ -155,7 +173,63 @@ const BookConsultation: React.FC<BookConsultationProps> = ({ theme = 'dark', onN
       <h1 className="text-3xl font-thin tracking-tighter uppercase mb-2 flex items-center gap-3">
         <Calendar size={28} /> Book a visit
       </h1>
-      <p className="text-[10px] uppercase tracking-widest opacity-70 mb-10">Pick a day on the calendar, then choose an available time.</p>
+      <p className="text-[10px] uppercase tracking-widest opacity-70 mb-2">Pick a day on the calendar, then choose an available time.</p>
+      <p className="text-sm font-semibold uppercase tracking-wider opacity-95 max-w-2xl mb-4 border-l-2 border-current pl-4 py-1">
+        By appointment only — please book a slot before visiting.
+      </p>
+      <p className="text-sm font-light opacity-85 max-w-2xl mb-4">
+        Because everything we make is custom made, we hold very limited inventory and don&apos;t necessarily have a traditional showroom—that&apos;s how we keep our promise: don&apos;t pay retail.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <a
+          href={GOOGLE_REVIEW_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm border border-current/20 hover:border-current/50 transition-colors"
+          aria-label={`${GOOGLE_RATING} out of 5 stars, ${GOOGLE_REVIEW_COUNT} Google reviews`}
+        >
+          <span className="font-semibold tabular-nums">{GOOGLE_RATING.toFixed(1)}</span>
+          <span className="flex items-center gap-0.5" aria-hidden>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Star key={i} size={14} className="fill-current" strokeWidth={0} />
+            ))}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider opacity-80">{GOOGLE_REVIEW_COUNT} Google reviews</span>
+        </a>
+      </div>
+
+      <div className="mb-10">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2">
+            <MapPin size={14} className="opacity-70" />
+            <p className="text-[10px] uppercase tracking-widest font-bold opacity-80">{visitAddress}</p>
+          </div>
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(visitAddress)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-current/30 hover:border-current/60 hover:bg-white/5 transition-all text-[10px] uppercase tracking-widest font-medium"
+          >
+            <Navigation size={16} aria-hidden />
+            Get directions
+          </a>
+        </div>
+        <p className="text-[9px] uppercase tracking-wider opacity-60 mb-3">By appointment only — book a time above before you visit.</p>
+        <div className="w-full aspect-video max-h-64 rounded-2xl overflow-hidden border border-current/10">
+          <iframe
+            title="Visit address"
+            src={`https://www.google.com/maps?q=${encodeURIComponent(visitAddress)}&output=embed`}
+            width="100%"
+            height="100%"
+            style={{ border: 0 }}
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            className="w-full h-full min-h-[200px]"
+          />
+        </div>
+      </div>
 
       <div className="grid lg:grid-cols-[1fr,380px] gap-10 lg:gap-14">
         {/* Calendar */}
@@ -255,8 +329,22 @@ const BookConsultation: React.FC<BookConsultationProps> = ({ theme = 'dark', onN
                 />
                 <div>
                   <label className="text-[8px] uppercase tracking-widest font-bold block mb-2">What would you like to discuss?</label>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {MEETING_TOPICS.map((topic) => (
+                      <button
+                        key={topic}
+                        type="button"
+                        onClick={() => setSummary(topic)}
+                        className={`px-3 py-1.5 text-[9px] uppercase tracking-wider border rounded-sm transition-all ${
+                          summary === topic ? 'bg-white text-black border-white' : 'border-current/30 hover:border-current/60'
+                        }`}
+                      >
+                        {topic}
+                      </button>
+                    ))}
+                  </div>
                   <textarea
-                    placeholder="e.g. Engagement ring consultation, stone viewing..."
+                    placeholder="Add more detail or describe something else..."
                     value={summary}
                     onChange={(e) => setSummary(e.target.value)}
                     rows={2}

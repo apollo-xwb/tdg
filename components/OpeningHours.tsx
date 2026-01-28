@@ -75,10 +75,10 @@ export const OpeningHoursBlock: React.FC<{ compact?: boolean; hours?: OpeningHou
   );
 };
 
-export const AddressBlock: React.FC = () => (
+export const AddressBlock: React.FC<{ address?: string | null }> = ({ address }) => (
   <div className="flex items-start gap-2">
     <MapPin size={12} className="mt-0.5 opacity-60" />
-    <span className="text-[9px] uppercase tracking-widest opacity-60 leading-snug">{TDG_ADDRESS}</span>
+    <span className="text-[9px] uppercase tracking-widest opacity-60 leading-snug">{address ?? TDG_ADDRESS}</span>
   </div>
 );
 
