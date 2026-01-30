@@ -50,7 +50,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
 
   return (
     <>
-      <nav className={`fixed top-0 left-0 right-0 z-50 px-6 xl:px-8 py-5 flex items-center justify-between glass transition-all ${isDark ? 'text-white' : 'text-black'}`}>
+      <nav className={`fixed top-0 left-0 right-0 z-50 px-6 xl:px-8 py-5 flex items-center justify-between glass transition-all ${isDark ? 'text-white' : 'text-black'} ${isMenuOpen ? 'xl:flex hidden' : ''}`}>
         <div 
           className="flex items-center gap-4 cursor-pointer"
           onClick={() => handleNav('Home')}
@@ -165,12 +165,39 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
         </div>
       </nav>
 
-      {/* Mobile Navigation Overlay — visual button grid (Pinterest-inspired) */}
+      {/* Mobile Navigation Overlay — logo, greeting, shortcuts, then browse grid */}
       {isMenuOpen && (
-        <div className={`fixed inset-0 z-40 xl:hidden flex flex-col pt-24 pb-6 animate-fadeIn ${isDark ? 'bg-[#121212] text-white' : 'bg-[#F9F9F9] text-black'}`}>
+        <div className={`fixed inset-0 z-50 xl:hidden flex flex-col animate-fadeIn ${isDark ? 'bg-[#121212] text-white' : 'bg-[#F9F9F9] text-black'}`}>
+          {/* Header: logo + close */}
+          <div className="flex-shrink-0 flex items-center justify-between px-5 py-5">
+            <img src={logoSrc} alt="Logo" className={`h-7 object-contain object-left ${isDark ? 'logo-invert' : 'logo-no-invert'}`} />
+            <button onClick={() => setIsMenuOpen(false)} className="p-2 rounded-full hover:bg-current/10 transition-colors" aria-label="Close menu">
+              <X size={24} />
+            </button>
+          </div>
           <div className="flex-1 min-h-0 relative">
-            <div className="absolute inset-0 overflow-y-auto overscroll-contain px-5">
+            <div className="absolute inset-0 overflow-y-auto overscroll-contain px-5 pb-6">
               <div className="flex flex-col gap-8 pb-12">
+                {/* Greeting */}
+                <div>
+                  <p className="text-sm uppercase tracking-[0.2em] font-medium">
+                    Welcome{sessionUser ? ` ${displayName(sessionUser)},` : ','}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-[0.25em] opacity-70 mt-0.5">Let&apos;s get started...</p>
+                </div>
+                {/* Shortcuts — above Browse */}
+                <div className="flex flex-wrap gap-2">
+                  {onOpenTour && (
+                    <button onClick={() => { onOpenTour(); setIsMenuOpen(false); }} className="flex items-center gap-2 py-2.5 px-4 rounded-xl border border-current/20 text-[10px] uppercase tracking-[0.2em] opacity-80 hover:opacity-100 hover:bg-current/5 transition-all">
+                      <HelpCircle size={16} /> How it works
+                    </button>
+                  )}
+                  {onOpenRingSizeGuide && (
+                    <button onClick={() => { onOpenRingSizeGuide(); setIsMenuOpen(false); }} className="flex items-center gap-2 py-2.5 px-4 rounded-xl border border-current/20 text-[10px] uppercase tracking-[0.2em] opacity-80 hover:opacity-100 hover:bg-current/5 transition-all">
+                      <Ruler size={16} /> Ring size guide
+                    </button>
+                  )}
+                </div>
                 {/* Browse — 2x2 grid of large rounded buttons */}
                 <nav aria-label="Browse">
                   <p className="text-[9px] uppercase tracking-[0.35em] opacity-50 mb-3 font-medium">Browse</p>
@@ -213,19 +240,6 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
                     })}
                   </div>
                 </nav>
-                {/* Shortcuts row */}
-                <div className="flex flex-wrap gap-2">
-                  {onOpenTour && (
-                    <button onClick={() => { onOpenTour(); setIsMenuOpen(false); }} className="flex items-center gap-2 py-2.5 px-4 rounded-xl border border-current/20 text-[10px] uppercase tracking-[0.2em] opacity-80 hover:opacity-100 hover:bg-current/5 transition-all">
-                      <HelpCircle size={16} /> How it works
-                    </button>
-                  )}
-                  {onOpenRingSizeGuide && (
-                    <button onClick={() => { onOpenRingSizeGuide(); setIsMenuOpen(false); }} className="flex items-center gap-2 py-2.5 px-4 rounded-xl border border-current/20 text-[10px] uppercase tracking-[0.2em] opacity-80 hover:opacity-100 hover:bg-current/5 transition-all">
-                      <Ruler size={16} /> Ring size guide
-                    </button>
-                  )}
-                </div>
                 {/* Your vault */}
                 {NAV_ITEMS.some((i) => i.id === 'Portal') && (
                   <nav aria-label="Your vault">
