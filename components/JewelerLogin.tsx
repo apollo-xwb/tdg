@@ -70,7 +70,7 @@ const JewelerLogin: React.FC<JewelerLoginProps> = ({ jewelerEmail, onSuccess }) 
             <LogIn size={16} /> Sign in
           </button>
         </form>
-        <p className="text-[9px] opacity-55 mt-6 text-center">Credentials are predefined. Change your password in Supabase Dashboard → Authentication after first sign-in.</p>
+        <p className="text-[9px] opacity-55 mt-6 text-center">Credentials are predefined. After first sign-in, go to Settings → Account & password to set or change your password.</p>
       </div>
     </div>
   );

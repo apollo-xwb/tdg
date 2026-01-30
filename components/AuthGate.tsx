@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, LogIn, UserPlus } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
-import { signInWithGoogle, signUpEmail, signInEmail } from '../lib/supabase';
+import { signInWithGoogle, signUpEmail, signInEmail, resetPasswordForEmail } from '../lib/supabase';
 
 const MIN_LENGTH = 10;
 const PASSWORD_RULES = {
@@ -28,7 +28,7 @@ interface AuthGateProps {
   theme?: 'dark' | 'light';
 }
 
-type Mode = 'choose' | 'signin' | 'create';
+type Mode = 'choose' | 'signin' | 'create' | 'forgot';
 
 const AuthGate: React.FC<AuthGateProps> = ({ onSuccess, theme = 'dark' }) => {
   const [mode, setMode] = useState<Mode>('choose');
@@ -63,6 +63,18 @@ const AuthGate: React.FC<AuthGateProps> = ({ onSuccess, theme = 'dark' }) => {
     else if (data?.user) onSuccess(data.user);
   };
 
+  const [forgotSent, setForgotSent] = useState(false);
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!email.trim()) { setError('Enter your email'); return; }
+    setLoading(true);
+    const { error: err } = await resetPasswordForEmail(email.trim());
+    setLoading(false);
+    if (err) setError(err.message || 'Failed to send reset link');
+    else setForgotSent(true);
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -84,6 +96,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ onSuccess, theme = 'dark' }) => {
           {mode === 'choose' && 'Sign in or create an account to continue'}
           {mode === 'signin' && 'Sign in to your account'}
           {mode === 'create' && 'Create a secure account'}
+          {mode === 'forgot' && 'Reset your password'}
         </h3>
         <p className="text-sm opacity-78 mt-1 max-w-sm mx-auto">
           We’ll use this to send your quote and keep your designs in your Vault.
@@ -132,6 +145,50 @@ const AuthGate: React.FC<AuthGateProps> = ({ onSuccess, theme = 'dark' }) => {
         </>
       )}
 
+      {mode === 'forgot' && (
+        <form onSubmit={handleForgotSubmit} className="space-y-5">
+          <p className="text-sm opacity-78">Enter your email and we&apos;ll send you a link to reset your password.</p>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest opacity-78 mb-2">Email</label>
+            <div className="relative">
+              <Mail size={16} className={`absolute left-3 top-1/2 -translate-y-1/2 opacity-60 ${isDark ? 'text-white' : 'text-black'}`} />
+              <input
+                type="email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError(''); setForgotSent(false); }}
+                placeholder="you@example.com"
+                className={`w-full pl-10 pr-4 py-3 border bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-current/30 ${
+                  isDark ? 'border-white/20' : 'border-black/20'
+                }`}
+                autoComplete="email"
+                disabled={forgotSent}
+              />
+            </div>
+          </div>
+          {forgotSent && (
+            <p className="text-sm text-emerald-500 font-medium">Check your email for a reset link. Click it to set a new password.</p>
+          )}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => { setMode('signin'); setError(''); setForgotSent(false); }}
+              className={`flex-1 py-3 border text-[10px] uppercase tracking-widest ${isDark ? 'border-white/20' : 'border-black/20'}`}
+            >
+              Back
+            </button>
+            <button
+              type="submit"
+              disabled={loading || forgotSent || !email.trim()}
+              className={`flex-1 py-3 font-bold text-[10px] uppercase tracking-widest ${
+                isDark ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {loading ? '…' : forgotSent ? 'Sent' : 'Send reset link'}
+            </button>
+          </div>
+        </form>
+      )}
+
       {(mode === 'signin' || mode === 'create') && (
         <form onSubmit={mode === 'signin' ? handleSignIn : handleCreate} className="space-y-5">
           <div>
@@ -165,6 +222,11 @@ const AuthGate: React.FC<AuthGateProps> = ({ onSuccess, theme = 'dark' }) => {
                 autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
               />
             </div>
+            {mode === 'signin' && (
+              <button type="button" onClick={() => setMode('forgot')} className="text-[10px] uppercase tracking-widest opacity-78 hover:opacity-100 -mt-2">
+                Forgot password?
+              </button>
+            )}
             {mode === 'create' && (
               <div className="mt-2 space-y-1">
                 <div className="flex gap-2 flex-wrap">

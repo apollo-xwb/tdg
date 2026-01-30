@@ -47,6 +47,17 @@ export async function signOut() {
   await supabase.auth.signOut();
 }
 
+export async function updatePassword(newPassword: string) {
+  if (!supabase) return { data: null, error: { message: 'Supabase not configured' } };
+  return supabase.auth.updateUser({ password: newPassword });
+}
+
+export async function resetPasswordForEmail(email: string, redirectTo?: string) {
+  if (!supabase) return { data: null, error: { message: 'Supabase not configured' } };
+  const url = redirectTo ?? (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname || '/'}` : '');
+  return supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: url });
+}
+
 // Jeweler: allowed email (set in env). Portal only for this identity.
 export function getJewelerEmail(): string {
   return (import.meta.env.VITE_JEWELER_EMAIL ?? '').trim();
@@ -672,10 +683,11 @@ export async function deleteBlogPost(id: string): Promise<void> {
 const JEWELER_ASSETS_BUCKET = 'jeweler-assets';
 
 /** Upload a file to jeweler-assets/{jewelerId}/{folder}/{uniqueName}. Returns public URL or null. */
-export async function uploadJewelerAsset(jewelerId: string, folder: 'logos' | 'guides', file: File): Promise<string | null> {
+export async function uploadJewelerAsset(jewelerId: string, folder: 'logos' | 'guides' | 'models', file: File): Promise<string | null> {
   if (!supabase || !jewelerId) return null;
+  const safeJewelerId = jewelerId.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/@/g, '_at_');
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const path = `${jewelerId}/${folder}/${Date.now()}-${safeName}`;
+  const path = `${safeJewelerId}/${folder}/${Date.now()}-${safeName}`;
   const { error } = await supabase.storage.from(JEWELER_ASSETS_BUCKET).upload(path, file, { upsert: true });
   if (error) {
     console.warn('[Supabase] uploadJewelerAsset error:', error.message);

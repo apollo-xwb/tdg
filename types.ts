@@ -34,6 +34,8 @@ export interface CatalogProduct {
   title: string;
   description: string;
   imageUrls: string[];
+  /** Optional GLB 3D model URL for interactive viewer. Convert FBX→GLB first. */
+  modelUrl?: string;
   priceZAR: number;
   metal?: Metal;
   type?: JewelleryType;

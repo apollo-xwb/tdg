@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ArrowRight, ShieldCheck, Sparkles, Clock } from 'lucide-react';
 import { DONTPAYRETAIL } from '../constants';
 import homeImg from '../src/home.png';
@@ -59,15 +59,15 @@ const Home: React.FC<{ theme?: 'dark' | 'light'; onStart: () => void; onLearn: (
         </div>
       </section>
 
-      {/* Centered #DontPayRetail above the feature boxes */}
-      <section className="w-full py-16 px-6">
+      {/* Parallax scroll-stopping section */}
+      <ParallaxSection theme={theme} className="w-full py-16 px-6">
         <div className="max-w-2xl mx-auto text-center">
           <p className={`text-[10px] uppercase tracking-[0.35em] mb-2 ${theme === 'light' ? 'text-black' : 'text-white'}`}>{DONTPAYRETAIL}</p>
           <p className={`text-[9px] uppercase tracking-widest leading-relaxed ${theme === 'light' ? 'text-black/80' : 'text-white'}`}>
             Pioneers of the movement. Custom only. No inventory—that’s how we charge under retail. Ethically sourced diamonds. Certified. GIA & EGL.
           </p>
         </div>
-      </section>
+      </ParallaxSection>
 
       {/* Features Grid */}
       <section className="py-12 lg:py-24 px-6 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-16">
@@ -91,6 +91,48 @@ const Home: React.FC<{ theme?: 'dark' | 'light'; onStart: () => void; onLearn: (
         />
       </section>
     </div>
+  );
+};
+
+/** Parallax section: background layer moves slower on scroll for a scroll-stopping depth effect */
+const ParallaxSection = ({ theme, className = '', children }: { theme?: 'dark' | 'light'; className?: string; children: React.ReactNode }) => {
+  const sectionRef = useRef<HTMLElement>(null);
+  const bgRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    const bg = bgRef.current;
+    if (!section || !bg) return;
+
+    const onScroll = () => {
+      const rect = section.getBoundingClientRect();
+      const viewportCenter = window.innerHeight / 2;
+      const sectionCenter = rect.top + rect.height / 2;
+      const distanceFromCenter = sectionCenter - viewportCenter;
+      const parallaxFactor = 0.15;
+      const offset = distanceFromCenter * parallaxFactor;
+      bg.style.transform = `translateY(${offset}px)`;
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const isDark = theme !== 'light';
+  return (
+    <section ref={sectionRef} className={`relative overflow-hidden ${className}`}>
+      <div
+        ref={bgRef}
+        className="absolute inset-0 -z-10 transition-transform duration-100 will-change-transform"
+        style={{ transform: 'translateY(0)' }}
+        aria-hidden
+      >
+        <div className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#0a0a0a] via-[#121212] to-[#0a0a0a]' : 'bg-gradient-to-b from-[#f5f5f5] via-[#F9F9F9] to-[#f5f5f5]'}`} />
+        <div className={`absolute inset-0 opacity-30 ${isDark ? 'bg-[radial-gradient(ellipse_80%_50%_at_50%_50%,rgba(212,175,55,0.08),transparent)]' : 'bg-[radial-gradient(ellipse_80%_50%_at_50%_50%,rgba(212,175,55,0.06),transparent)]'}`} />
+      </div>
+      {children}
+    </section>
   );
 };
 

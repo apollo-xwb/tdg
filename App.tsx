@@ -25,6 +25,7 @@ import BookConsultation from './components/BookConsultation';
 import About from './components/About';
 import { LOGO_URL, TDG_ADDRESS } from './constants';
 import RingSizeGuideModal from './components/RingSizeGuideModal';
+import PasswordRecoveryModal from './components/PasswordRecoveryModal';
 
 const defaultState: UserState = {
   diamondIQ: [],
@@ -56,6 +57,7 @@ const App: React.FC = () => {
   const [emailFlows, setEmailFlows] = useState<EmailFlow[]>([]);
   const [jewelerSettings, setJewelerSettings] = useState<JewelerSettings | null>(null);
   const [showRingSizeGuide, setShowRingSizeGuide] = useState(false);
+  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
 
   const refreshJewelerSettings = useCallback(async () => {
     const s = await fetchJewelerSettings();
@@ -87,8 +89,9 @@ const App: React.FC = () => {
         setSyncedOnce(true);
       });
     });
-    const unsub = onAuthStateChange((_, session) => {
+    const unsub = onAuthStateChange((event, session) => {
       if (cancelled) return;
+      if (event === 'PASSWORD_RECOVERY') setShowPasswordRecovery(true);
       applySession(session?.user ?? null);
       // Refetch so UI shows the correct tenant (or anon scope) immediately
       Promise.all([fetchDesigns(), fetchLeads(), fetchCatalogProducts(), fetchEmailFlows(), fetchJewelerSettings()]).then(([designs, leads, catalog, flows, settings]) => {
@@ -178,6 +181,11 @@ const App: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isBlog = location.pathname === '/blog' || location.pathname.startsWith('/blog/');
+
+  // Scroll to top when navigating to a new page
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [currentView, location.pathname]);
   const navView: AppView = isBlog ? 'Blog' : currentView;
 
   const handleNavTo = (view: AppView) => {
@@ -241,6 +249,7 @@ const App: React.FC = () => {
 
       <Footer theme={userState.theme} onNavigate={handleNavTo} onOpenTour={() => setTourOpen(true)} onOpenRingSizeGuide={() => setShowRingSizeGuide(true)} hours={jewelerSettings?.openingHours ?? undefined} logoUrl={logoFooter} address={jewelerSettings?.address ?? TDG_ADDRESS} />
       <RingSizeGuideModal isOpen={showRingSizeGuide} onClose={() => setShowRingSizeGuide(false)} theme={userState.theme} />
+      <PasswordRecoveryModal isOpen={showPasswordRecovery} onClose={() => setShowPasswordRecovery(false)} theme={userState.theme} />
       <FloatingConcierge onNavigate={handleNavTo} />
       <TutorialWizard
         isOpen={tourOpen}

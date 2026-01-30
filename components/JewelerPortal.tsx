@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { UserState, JewelleryConfig, OrderStatus, Lead, CatalogProduct, LeadStatus, EmailFlow, EmailFlowTriggerType, JewelerSettings, Appointment, JewelerAvailabilitySlot, OpeningHoursEntry, VaultGuide, BlogPost } from '../types';
-import { getJewelerEmail, supabase, fetchCatalogProducts, upsertCatalogProduct, deleteCatalogProduct, fetchEmailFlows, upsertEmailFlow, deleteEmailFlow, upsertJewelerSettings, fetchAppointments, fetchJewelerAvailability, upsertJewelerAvailabilitySlot, deleteJewelerAvailabilitySlot, updateAppointment, fetchVaultGuidesAdmin, upsertVaultGuide, deleteVaultGuide, fetchBlogPostsAdmin, upsertBlogPost, deleteBlogPost, uploadJewelerAsset } from '../lib/supabase';
+import { getJewelerEmail, supabase, signOut, updatePassword, fetchCatalogProducts, upsertCatalogProduct, deleteCatalogProduct, fetchEmailFlows, upsertEmailFlow, deleteEmailFlow, upsertJewelerSettings, fetchAppointments, fetchJewelerAvailability, upsertJewelerAvailabilitySlot, deleteJewelerAvailabilitySlot, updateAppointment, fetchVaultGuidesAdmin, upsertVaultGuide, deleteVaultGuide, fetchBlogPostsAdmin, upsertBlogPost, deleteBlogPost, uploadJewelerAsset } from '../lib/supabase';
 import { calculateQuotePrice } from '../lib/quotePrice';
 import { notifyClientIfRequested } from '../lib/notifyClient';
 import JewelerLogin from './JewelerLogin';
-import { Search, Edit3, Trash2, Phone, FileText, Plus, Save, X, Shield, Share2, Video, CreditCard, LayoutGrid, List, Package, BarChart3, Mail, Copy, Settings, Sparkles, Calendar, Clock, BookOpen, FolderOpen, Upload } from 'lucide-react';
+import { Search, Edit3, Trash2, Phone, FileText, Plus, Save, X, Shield, Share2, Video, CreditCard, LayoutGrid, List, Package, BarChart3, Mail, Copy, Settings, Sparkles, Calendar, Clock, BookOpen, FolderOpen, Upload, LogOut, Lock } from 'lucide-react';
 import { METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, JEWELLERY_TYPES, OPENING_HOURS, DONTPAYRETAIL } from '../constants';
 import { EMAIL_FLOW_TRIGGER_LABELS, DEFAULT_EMAIL_TEMPLATES, VARIABLE_HINT, createFlowFromTemplate } from '../lib/emailFlowTemplates';
 import { DAY_NAMES } from '../lib/calendarSlots';
@@ -210,6 +210,11 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
   const [googleReviewUrlDraft, setGoogleReviewUrlDraft] = useState('');
   const [savingGoogleReview, setSavingGoogleReview] = useState(false);
   const [generatingPaystackId, setGeneratingPaystackId] = useState<string | null>(null);
+  const [passwordNew, setPasswordNew] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   useEffect(() => {
     if (tab === 'Settings') {
@@ -451,6 +456,9 @@ For questions, please contact our concierge.`;
           <TabBtn active={tab === 'Settings'} label="Settings" onClick={() => setTab('Settings')} icon={<Settings size={14}/>} />
           <TabBtn active={tab === 'Guides'} label={`Guides (${vaultGuides.length})`} onClick={() => { setTab('Guides'); setEditingGuideId(null); setAddingGuide(false); setGuideForm({ title: '', description: '', downloadUrl: '', suggestedFilename: '', tags: [], sortOrder: vaultGuides.length, isActive: true }); }} icon={<FolderOpen size={14}/>} />
           <TabBtn active={tab === 'Blog'} label={`Blog (${blogPosts.length})`} onClick={() => { setTab('Blog'); setEditingBlogId(null); setAddingBlog(false); setBlogForm({ title: '', slug: '', metaDescription: '', category: 'Guide', excerpt: '', readTimeMinutes: 5, body: [] }); }} icon={<BookOpen size={14}/>} />
+          <button type="button" onClick={() => signOut()} className="flex items-center gap-2 px-4 py-2 border border-white/20 text-[9px] uppercase tracking-widest opacity-70 hover:opacity-100 hover:bg-white/5 transition-all ml-auto" title="Sign out">
+            <LogOut size={14} /> Sign out
+          </button>
         </div>
       </header>
 
@@ -1635,11 +1643,68 @@ For questions, please contact our concierge.`;
                 </button>
               </div>
             </div>
+
+            <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
+              <h2 className="text-[11px] uppercase tracking-[0.6em] font-bold border-b border-current/10 pb-4 flex items-center gap-2">
+                <Lock size={14} /> Account & password
+              </h2>
+              <p className="text-[9px] opacity-65">Set or change your password after the default one was generated. You can change it anytime.</p>
+              {passwordError && <div className="p-3 rounded border border-red-500/40 bg-red-500/10 text-red-400 text-sm">{passwordError}</div>}
+              {passwordSuccess && <div className="p-3 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-sm">Password updated.</div>}
+              <div className="space-y-4 max-w-sm">
+                <div>
+                  <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">New password</label>
+                  <input
+                    type="password"
+                    value={passwordNew}
+                    onChange={e => { setPasswordNew(e.target.value); setPasswordError(''); }}
+                    placeholder="Min 10 chars, upper, lower, number, symbol"
+                    className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50"
+                    autoComplete="new-password"
+                    disabled={passwordSuccess}
+                  />
+                </div>
+                <div>
+                  <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Confirm password</label>
+                  <input
+                    type="password"
+                    value={passwordConfirm}
+                    onChange={e => { setPasswordConfirm(e.target.value); setPasswordError(''); }}
+                    placeholder="Repeat password"
+                    className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50"
+                    autoComplete="new-password"
+                    disabled={passwordSuccess}
+                  />
+                  {passwordConfirm && passwordNew !== passwordConfirm && <p className="text-[9px] text-red-400 mt-1">Passwords do not match</p>}
+                </div>
+                <button
+                  type="button"
+                  disabled={passwordLoading || passwordSuccess || !passwordNew || passwordNew !== passwordConfirm || passwordNew.length < 10}
+                  onClick={async () => {
+                    setPasswordError('');
+                    if (passwordNew !== passwordConfirm || passwordNew.length < 10) return;
+                    setPasswordLoading(true);
+                    const { error: err } = await updatePassword(passwordNew);
+                    setPasswordLoading(false);
+                    if (err) setPasswordError(err.message || 'Failed to update password');
+                    else {
+                      setPasswordSuccess(true);
+                      setPasswordNew('');
+                      setPasswordConfirm('');
+                    }
+                  }}
+                  className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Lock size={14} /> {passwordLoading ? 'Updating…' : passwordSuccess ? 'Updated' : 'Change password'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
         {tab === 'Catalog' && (
           <CatalogTab
+            jewelerId={getJewelerEmail() || ''}
             products={catalogProducts}
             form={catalogForm}
             setForm={setCatalogForm}
@@ -1654,6 +1719,7 @@ For questions, please contact our concierge.`;
                 description: p.description || '',
                 imageUrls: Array.isArray(p.imageUrls) ? p.imageUrls : [],
                 priceZAR: p.priceZAR ?? 0,
+                modelUrl: p.modelUrl,
                 metal: p.metal,
                 type: p.type,
                 shape: p.shape,
@@ -1688,6 +1754,7 @@ For questions, please contact our concierge.`;
 const STONE_CATEGORIES: string[] = ['Diamond', 'Sapphire', 'Emerald', 'Ruby', 'Moissanite', 'Aquamarine', 'Amethyst', 'None', 'Other'];
 
 const CatalogTab: React.FC<{
+  jewelerId: string;
   products: CatalogProduct[];
   form: Partial<CatalogProduct>;
   setForm: (f: Partial<CatalogProduct>) => void;
@@ -1696,9 +1763,10 @@ const CatalogTab: React.FC<{
   onSave: (p: Partial<CatalogProduct>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onAddNew: () => void;
-}> = ({ products, form, setForm, editingId, setEditingId, onSave, onDelete, onAddNew }) => {
+}> = ({ jewelerId, products, form, setForm, editingId, setEditingId, onSave, onDelete, onAddNew }) => {
   const isFormOpen = editingId !== null;
   const isNew = editingId === '__new__';
+  const [modelUploading, setModelUploading] = React.useState(false);
 
   return (
     <div className="space-y-8">
@@ -1723,6 +1791,13 @@ const CatalogTab: React.FC<{
               <textarea value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none focus:border-white/30" placeholder="Short description" />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Image URLs (one per line)</label>
               <textarea value={(form.imageUrls || []).join('\n')} onChange={e => setForm({ ...form, imageUrls: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) })} rows={2} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none focus:border-white/30" placeholder="https://..." />
+              <label className="text-[8px] uppercase opacity-68 font-bold block">3D Model (OBJ / GLB)</label>
+              <div className="flex gap-2 items-center">
+                <input type="file" accept=".glb,.gltf,.obj" onChange={async e => { const f = e.target.files?.[0]; if (!f || !jewelerId) return; setModelUploading(true); try { const url = await uploadJewelerAsset(jewelerId, 'models', f); if (url) setForm(prev => ({ ...prev, modelUrl: url })); } finally { setModelUploading(false); e.target.value = ''; } }} className="text-[9px] file:mr-2 file:py-1 file:px-3 file:border file:border-white/20 file:bg-white/5 file:text-[9px] file:uppercase file:tracking-widest" disabled={modelUploading} />
+                <input value={form.modelUrl || ''} onChange={e => setForm(prev => ({ ...prev, modelUrl: e.target.value || undefined }))} placeholder="Or paste URL" className="flex-1 bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none focus:border-white/30" readOnly={modelUploading} />
+                {modelUploading && <span className="text-[9px] opacity-60">Uploading…</span>}
+              </div>
+              <p className="text-[8px] opacity-50">Use the Upload button — local file paths (C:\...) don&apos;t work. Paste URL only for files already hosted online.</p>
               <label className="flex items-center gap-2 text-[8px] uppercase opacity-68 font-bold">
                 <input type="checkbox" checked={form.isActive !== false} onChange={e => setForm({ ...form, isActive: e.target.checked })} />
                 Active (shown in Collection)
@@ -1761,7 +1836,7 @@ const CatalogTab: React.FC<{
             </div>
           </div>
           <div className="flex gap-4">
-            <button onClick={() => onSave(form)} className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2">
+            <button onClick={() => onSave(form)} disabled={modelUploading} className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
               <Save size={14} /> Save
             </button>
             {!isNew && form.id && (

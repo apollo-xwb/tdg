@@ -1,9 +1,10 @@
-
 import React, { useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { UserState, AppView, OrderStatus, JewelleryConfig } from '../types';
 import { EXCHANGE_RATES } from '../constants';
-import { Heart, Box, MessageSquare, FileText, Video, CreditCard, ChevronDown, ChevronUp, Download, Share2, Edit3, Send, Lock } from 'lucide-react';
+import { Heart, Box, MessageSquare, FileText, Video, CreditCard, ChevronDown, ChevronUp, Download, Share2, Edit3, Send, Lock, LogOut } from 'lucide-react';
+import AuthGate from './AuthGate';
+import { signOut } from '../lib/supabase';
 
 const ORDER_STATUS_FLOW: OrderStatus[] = ['Quoted', 'Approved', 'Deposit Paid', 'Sourcing Stone', 'In Production', 'Final Polish', 'Ready', 'Collected'];
 
@@ -56,9 +57,17 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
            <p className="text-[11px] uppercase tracking-[0.5em] opacity-68">Secured Client Vault</p>
            <h1 className="text-7xl font-thin tracking-tighter uppercase">Your Profile</h1>
         </div>
-        <div className="flex items-center gap-16">
+        <div className="flex items-center gap-8">
            <Stat label="Saved Masterpieces" val={userState.recentDesigns.length} />
            <Stat label="Live Crafting" val={userState.recentDesigns.filter(d => d.isApproved).length} />
+           <button
+             type="button"
+             onClick={() => signOut()}
+             className="flex items-center gap-2 py-2 px-4 border border-current/20 text-[10px] uppercase tracking-widest opacity-70 hover:opacity-100 transition-opacity"
+             title="Sign out"
+           >
+             <LogOut size={14} /> Sign out
+           </button>
         </div>
       </header>
 

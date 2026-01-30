@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { AppView, CatalogProduct, Lead } from '../types';
 import { EXCHANGE_RATES } from '../constants';
 import { MessageSquare, ChevronDown, X } from 'lucide-react';
+import ProductModelViewer from './ProductModelViewer';
 
 type SortKey = 'newest' | 'price-asc' | 'price-desc' | 'type' | 'metal';
 
@@ -104,12 +105,16 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {sorted.map(p => (
             <div key={p.id} className="glass border border-current/5 rounded-sm overflow-hidden flex flex-col">
-              <div className="aspect-square relative bg-black/20">
-                <img
-                  src={p.imageUrls?.[0] || 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400'}
-                  alt={p.title}
-                  className="w-full h-full object-cover"
-                />
+              <div className="aspect-square relative bg-black/20 min-h-[240px]">
+                {p.modelUrl ? (
+                  <ProductModelViewer src={p.modelUrl} alt={p.title} poster={p.imageUrls?.[0]} className="absolute inset-0 w-full h-full" />
+                ) : (
+                  <img
+                    src={p.imageUrls?.[0] || 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400'}
+                    alt={p.title}
+                    className="w-full h-full object-cover"
+                  />
+                )}
               </div>
               <div className="p-6 flex flex-col flex-grow">
                 <h3 className="text-[11px] uppercase tracking-widest font-bold">{p.title}</h3>
