@@ -437,29 +437,59 @@ For questions, please contact our concierge.`;
     return <JewelerLogin jewelerEmail={jewelerEmail} onSuccess={() => {}} />;
   }
 
+  const TAB_ITEMS: { id: typeof tab; label: string; icon: React.ReactNode; count?: number }[] = [
+    { id: 'Board', label: 'Production Board', icon: <LayoutGrid size={28} strokeWidth={1.5} /> },
+    { id: 'Orders', label: 'Orders', icon: <List size={28} strokeWidth={1.5} />, count: userState.recentDesigns.length },
+    { id: 'Leads', label: 'Leads', icon: <FileText size={28} strokeWidth={1.5} />, count: userState.leads.length },
+    { id: 'Catalog', label: 'Catalog', icon: <Package size={28} strokeWidth={1.5} />, count: catalogProducts.length },
+    { id: 'NewQuote', label: 'Manual Quote', icon: <Plus size={28} strokeWidth={1.5} /> },
+    { id: 'Analytics', label: 'Analytics', icon: <BarChart3 size={28} strokeWidth={1.5} /> },
+    { id: 'Email', label: 'Email', icon: <Mail size={28} strokeWidth={1.5} />, count: emailFlows.length },
+    { id: 'Calendar', label: 'Calendar', icon: <Calendar size={28} strokeWidth={1.5} />, count: appointments.filter(a => a.status === 'scheduled').length },
+    { id: 'Settings', label: 'Settings', icon: <Settings size={28} strokeWidth={1.5} /> },
+    { id: 'Guides', label: 'Guides', icon: <FolderOpen size={28} strokeWidth={1.5} />, count: vaultGuides.length },
+    { id: 'Blog', label: 'Blog', icon: <BookOpen size={28} strokeWidth={1.5} />, count: blogPosts.length },
+  ];
+
+  const handleTabClick = (id: typeof tab) => {
+    if (id === 'Catalog') { setTab('Catalog'); setEditingCatalogId(null); setCatalogForm(emptyCatalogForm); }
+    else if (id === 'Email') { setTab('Email'); setEditingFlowId(null); setFlowForm({}); }
+    else if (id === 'Guides') { setTab('Guides'); setEditingGuideId(null); setAddingGuide(false); setGuideForm({ title: '', description: '', downloadUrl: '', suggestedFilename: '', tags: [], sortOrder: vaultGuides.length, isActive: true }); }
+    else if (id === 'Blog') { setTab('Blog'); setEditingBlogId(null); setAddingBlog(false); setBlogForm({ title: '', slug: '', metaDescription: '', category: 'Guide', excerpt: '', readTimeMinutes: 5, body: [] }); }
+    else setTab(id);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12 space-y-16 animate-fadeIn">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 border-b border-current/10 pb-12">
-        <div className="space-y-4">
-          <p className="text-[10px] uppercase tracking-[0.6em] text-emerald-500 font-bold">Jeweller Command Centre</p>
-          <h1 className="text-5xl font-thin tracking-tighter uppercase">Operations Hub</h1>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <TabBtn active={tab === 'Board'} label="Production Board" onClick={() => setTab('Board')} icon={<LayoutGrid size={14}/>} />
-          <TabBtn active={tab === 'Orders'} label={`Orders (${userState.recentDesigns.length})`} onClick={() => setTab('Orders')} icon={<List size={14}/>} />
-          <TabBtn active={tab === 'Leads'} label={`Leads (${userState.leads.length})`} onClick={() => setTab('Leads')} />
-          <TabBtn active={tab === 'Catalog'} label={`Catalog (${catalogProducts.length})`} onClick={() => { setTab('Catalog'); setEditingCatalogId(null); setCatalogForm(emptyCatalogForm); }} icon={<Package size={14}/>} />
-          <TabBtn active={tab === 'NewQuote'} label="Manual Quote" onClick={() => setTab('NewQuote')} icon={<Plus size={14}/>} />
-          <TabBtn active={tab === 'Analytics'} label="Analytics" onClick={() => setTab('Analytics')} icon={<BarChart3 size={14}/>} />
-          <TabBtn active={tab === 'Email'} label={`Email (${emailFlows.length})`} onClick={() => { setTab('Email'); setEditingFlowId(null); setFlowForm({}); }} icon={<Mail size={14}/>} />
-          <TabBtn active={tab === 'Calendar'} label={`Calendar (${appointments.filter(a => a.status === 'scheduled').length})`} onClick={() => setTab('Calendar')} icon={<Calendar size={14}/>} />
-          <TabBtn active={tab === 'Settings'} label="Settings" onClick={() => setTab('Settings')} icon={<Settings size={14}/>} />
-          <TabBtn active={tab === 'Guides'} label={`Guides (${vaultGuides.length})`} onClick={() => { setTab('Guides'); setEditingGuideId(null); setAddingGuide(false); setGuideForm({ title: '', description: '', downloadUrl: '', suggestedFilename: '', tags: [], sortOrder: vaultGuides.length, isActive: true }); }} icon={<FolderOpen size={14}/>} />
-          <TabBtn active={tab === 'Blog'} label={`Blog (${blogPosts.length})`} onClick={() => { setTab('Blog'); setEditingBlogId(null); setAddingBlog(false); setBlogForm({ title: '', slug: '', metaDescription: '', category: 'Guide', excerpt: '', readTimeMinutes: 5, body: [] }); }} icon={<BookOpen size={14}/>} />
-          <button type="button" onClick={() => signOut()} className="flex items-center gap-2 px-4 py-2 border border-white/20 text-[9px] uppercase tracking-widest opacity-70 hover:opacity-100 hover:bg-white/5 transition-all ml-auto" title="Sign out">
+      <header className="flex flex-col gap-8 border-b border-current/10 pb-12">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+          <div className="space-y-4">
+            <p className="text-[10px] uppercase tracking-[0.6em] text-emerald-500 font-bold">Jeweller Command Centre</p>
+            <h1 className="text-5xl font-thin tracking-tighter uppercase">Operations Hub</h1>
+          </div>
+          <button type="button" onClick={() => signOut()} className="flex items-center gap-2 px-4 py-2 border border-white/20 text-[9px] uppercase tracking-widest opacity-70 hover:opacity-100 hover:bg-white/5 transition-all" title="Sign out">
             <LogOut size={14} /> Sign out
           </button>
         </div>
+        {/* Hamburger-style nav grid */}
+        <nav aria-label="Operations" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          {TAB_ITEMS.map(({ id, label, icon, count }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleTabClick(id)}
+              className={`flex flex-col items-center justify-center gap-2.5 py-6 px-4 rounded-2xl transition-all min-h-[100px] bg-white/10 hover:bg-white/18 border border-white/10 ${
+                tab === id ? 'ring-2 ring-white/40' : ''
+              }`}
+            >
+              <span className="text-white">{icon}</span>
+              <span className="text-[10px] uppercase tracking-[0.2em] font-medium">{label}</span>
+              {count != null && count > 0 && (
+                <span className="text-[9px] opacity-70">({count})</span>
+              )}
+            </button>
+          ))}
+        </nav>
       </header>
 
       {tab !== 'NewQuote' && tab !== 'Catalog' && tab !== 'Analytics' && tab !== 'Email' && tab !== 'Settings' && tab !== 'Calendar' && tab !== 'Guides' && tab !== 'Blog' && (
@@ -471,7 +501,27 @@ For questions, please contact our concierge.`;
 
       <div className="space-y-6">
         {tab === 'Board' && (
-          <div className="overflow-x-auto pb-4 -mx-2">
+          <>
+            {/* Dashboard summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="glass border border-white/10 rounded-2xl p-6 flex flex-col gap-2">
+                <span className="text-[9px] uppercase tracking-widest opacity-70">Total orders</span>
+                <span className="text-2xl font-light">{userState.recentDesigns.length}</span>
+              </div>
+              <div className="glass border border-white/10 rounded-2xl p-6 flex flex-col gap-2">
+                <span className="text-[9px] uppercase tracking-widest opacity-70">New leads</span>
+                <span className="text-2xl font-light">{userState.leads.filter(l => l.status === 'New').length}</span>
+              </div>
+              <div className="glass border border-white/10 rounded-2xl p-6 flex flex-col gap-2">
+                <span className="text-[9px] uppercase tracking-widest opacity-70">In production</span>
+                <span className="text-2xl font-light">{userState.recentDesigns.filter(d => ['Sourcing Stone', 'In Production', 'Final Polish'].includes(d.status)).length}</span>
+              </div>
+              <div className="glass border border-white/10 rounded-2xl p-6 flex flex-col gap-2">
+                <span className="text-[9px] uppercase tracking-widest opacity-70">Ready / Collected</span>
+                <span className="text-2xl font-light">{userState.recentDesigns.filter(d => ['Ready', 'Collected'].includes(d.status)).length}</span>
+              </div>
+            </div>
+            <div className="overflow-x-auto pb-4 -mx-2">
             <div className="flex gap-4 min-w-max">
               {STATUS_FLOW.map(status => (
                 <div
@@ -503,7 +553,10 @@ For questions, please contact our concierge.`;
                         <p className="text-[10px] uppercase font-bold truncate">{design.id}</p>
                         <p className="text-[9px] opacity-70 truncate">{design.firstName} {design.lastName}</p>
                         <p className="text-[8px] opacity-60 uppercase mt-1">{design.type} • ZAR {design.priceZAR?.toLocaleString()}</p>
-                        {design.isApproved && <span className="inline-block mt-1 text-[7px] bg-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded">Approved</span>}
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {design.catalogProductId && <span className="inline-block text-[7px] bg-amber-500/30 text-amber-400 px-1.5 py-0.5 rounded">Pre-config</span>}
+                          {design.isApproved && <span className="inline-block text-[7px] bg-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded">Approved</span>}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -511,6 +564,7 @@ For questions, please contact our concierge.`;
               ))}
             </div>
           </div>
+          </>
         )}
         {tab === 'Board' && editingId && (
           <div className="glass border border-white/10 rounded-sm p-6 animate-fadeIn">
@@ -1870,11 +1924,5 @@ const CatalogTab: React.FC<{
     </div>
   );
 };
-
-const TabBtn = ({ active, label, onClick, icon }: any) => (
-  <button onClick={onClick} className={`px-8 py-4 text-[10px] uppercase tracking-widest border transition-all flex items-center gap-2 ${active ? 'bg-white text-black border-white' : 'border-current/10 opacity-65'}`}>
-    {icon} {label}
-  </button>
-);
 
 export default JewelerPortal;

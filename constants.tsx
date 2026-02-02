@@ -95,10 +95,20 @@ export const QUALITY_TIERS: Record<string, { label: string, sub: string, color: 
   }
 };
 
+/** Realistic metal gradients for swatches — warm gold, true rose, soft silver */
+export const METAL_SWATCH_GRADIENTS: Record<string, string> = {
+  Platinum: 'linear-gradient(145deg, #E8E6E3 0%, #C9C6C2 40%, #B8B5B0 100%)',
+  'White Gold': 'linear-gradient(145deg, #F2F0ED 0%, #D8D5D0 40%, #C4C1BC 100%)',
+  'Yellow Gold': 'linear-gradient(145deg, #D4AF37 0%, #C5A028 40%, #B8860B 100%)',
+  'Rose Gold': 'linear-gradient(145deg, #B76E79 0%, #A85C67 40%, #8B4A52 100%)',
+  Silver: 'linear-gradient(145deg, #C8C6C4 0%, #A8A6A4 40%, #908E8C 100%)',
+  Other: 'linear-gradient(145deg, #D4D2D0 0%, #B8B6B4 40%, #9C9A98 100%)',
+};
+
 export const METAL_DATA: Record<string, { price: number, gradient: string, insight: string, img: string }> = {
   'Platinum': { 
     price: 16500, 
-    gradient: 'linear-gradient(135deg, #E5E4E2 0%, #B4B4B4 50%, #E5E4E2 100%)',
+    gradient: METAL_SWATCH_GRADIENTS.Platinum,
     insight: 'Naturally white and hypoallergenic. The heaviest, most durable precious metal—stones stay secure for life. No plating; holds its finish. Ideal for heirlooms.',
     img: 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80&w=400'
   },
@@ -110,31 +120,31 @@ export const METAL_DATA: Record<string, { price: number, gradient: string, insig
   },
   'Yellow Gold': { 
     price: 10200, 
-    gradient: 'linear-gradient(135deg, #FFD700 0%, #DAA520 50%, #FFD700 100%)',
+    gradient: METAL_SWATCH_GRADIENTS['Yellow Gold'],
     insight: 'Timeless and warm. 18k Yellow Gold pairs beautifully with diamonds and never goes out of style. Higher purity than 14k for a richer colour; slightly softer.',
     img: 'https://images.unsplash.com/photo-1615655406736-b37c4fabf923?auto=format&fit=crop&q=80&w=400'
   },
   'Rose Gold': { 
     price: 10200, 
-    gradient: 'linear-gradient(135deg, #E6C2BF 0%, #B76E79 50%, #E6C2BF 100%)',
+    gradient: METAL_SWATCH_GRADIENTS['Rose Gold'],
     insight: 'Copper alloy gives rose gold its romantic hue and makes it a bit tougher than yellow or white gold. Hypoallergenic-friendly; flattering on most skin tones.',
     img: 'https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?auto=format&fit=crop&q=80&w=400'
   },
   'Silver': { 
     price: 650, 
-    gradient: 'linear-gradient(135deg, #C0C0C0 0%, #A9A9A9 50%, #C0C0C0 100%)',
+    gradient: METAL_SWATCH_GRADIENTS.Silver,
     insight: 'Affordable and versatile. Silver is softer than gold—best for fashion or occasional wear. Regular polishing prevents tarnish. Great for trying a style before committing to gold.',
     img: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&q=80&w=400'
   },
   '18K Gold': { 
     price: 10200, 
-    gradient: 'linear-gradient(135deg, #FFD700 0%, #DAA520 50%, #FFD700 100%)',
+    gradient: METAL_SWATCH_GRADIENTS['Yellow Gold'],
     insight: '75% pure gold—richer colour and warmth than 14K. Softer, so it can show wear over decades. Choose 18K for maximum luxury and colour; 14K for durability.',
     img: 'https://images.unsplash.com/photo-1615655406736-b37c4fabf923?auto=format&fit=crop&q=80&w=400'
   },
   '14K Gold': { 
     price: 8200, 
-    gradient: 'linear-gradient(135deg, #F0D875 0%, #D4AF37 50%, #F0D875 100%)',
+    gradient: METAL_SWATCH_GRADIENTS['Yellow Gold'],
     insight: '58.3% pure gold. More durable than 18K—ideal for everyday rings. Slightly paler than 18K but holds up to knocks and wear. The practical choice for active lifestyles.',
     img: 'https://images.unsplash.com/photo-1615655406736-b37c4fabf923?auto=format&fit=crop&q=80&w=400'
   },
@@ -146,11 +156,58 @@ export const METAL_DATA: Record<string, { price: number, gradient: string, insig
   },
   'Other': { 
     price: 4200, 
-    gradient: 'linear-gradient(135deg, #E5E4E2 0%, #B4B4B4 50%, #E5E4E2 100%)',
+    gradient: METAL_SWATCH_GRADIENTS.Other,
     insight: 'Palladium, titanium, mixed metals, or something else? Tell us what you have in mind and we’ll quote. We craft custom—no inventory, so we can work to your vision.',
     img: 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80&w=400'
   }
 };
+
+/** Parse "14K Yellow Gold" → { metalType: "Yellow Gold", karat: "14K" } */
+export function parseMetalLabel(metal: string): { metalType: string; karat: string } {
+  const m = (metal || '').trim().toLowerCase();
+  if (m.includes('platinum') || m.includes('950')) return { metalType: 'Platinum', karat: (metal || '').match(/\d+/)?.[0] ?? '950' };
+  if (m.includes('white gold')) return { metalType: 'White Gold', karat: (metal || '').match(/\d+k/i)?.[0] ?? (metal || '').split(/\s/)[0] ?? '' };
+  if (m.includes('rose gold')) return { metalType: 'Rose Gold', karat: (metal || '').match(/\d+k/i)?.[0] ?? (metal || '').split(/\s/)[0] ?? '' };
+  if (m.includes('yellow gold') || (m.includes('gold') && !m.includes('white') && !m.includes('rose'))) return { metalType: 'Yellow Gold', karat: (metal || '').match(/\d+k/i)?.[0] ?? (metal || '').split(/\s/)[0] ?? '' };
+  if (m.includes('silver') || m.includes('sterling')) return { metalType: 'Silver', karat: '' };
+  return { metalType: 'Other', karat: (metal || '').split(/\s/)[0] ?? '' };
+}
+
+/** Group variants by metal type; each group has karats and full metal strings */
+export function groupMetalsByType(metalStrings: string[]): { metalType: string; karats: string[]; fullMetals: string[] }[] {
+  const byType = new Map<string, { karats: Set<string>; fullMetals: string[] }>();
+  const order = ['Yellow Gold', 'White Gold', 'Rose Gold', 'Platinum', 'Silver', 'Other'];
+  for (const m of metalStrings) {
+    if (!m) continue;
+    const { metalType, karat } = parseMetalLabel(m);
+    const entry = byType.get(metalType) ?? { karats: new Set(), fullMetals: [] };
+    if (karat) entry.karats.add(karat);
+    entry.fullMetals.push(m);
+    byType.set(metalType, entry);
+  }
+  const sorted = [...byType.entries()].sort((a, b) => {
+    const ia = order.indexOf(a[0]);
+    const ib = order.indexOf(b[0]);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
+  return sorted.map(([metalType, { karats, fullMetals }]) => ({
+    metalType,
+    karats: [...karats].sort((a, b) => {
+      const na = parseInt(a, 10), nb = parseInt(b, 10);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      if (a === '950') return 1;
+      if (b === '950') return -1;
+      return a.localeCompare(b);
+    }),
+    fullMetals,
+  }));
+}
+
+/** Map metal label to swatch gradient (uses realistic METAL_SWATCH_GRADIENTS) */
+export function getMetalSwatchGradient(metal: string): string {
+  const { metalType } = parseMetalLabel(metal);
+  return METAL_SWATCH_GRADIENTS[metalType] ?? METAL_SWATCH_GRADIENTS.Other;
+}
 
 export const SETTING_DATA: Record<string, { price: number, img: string }> = {
   'Solitaire': { price: 0, img: solitaireImg },

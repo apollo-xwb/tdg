@@ -17,6 +17,9 @@ import FloatingConcierge from './components/FloatingConcierge';
 const Blog = lazy(() => import('./components/Blog'));
 import JewelerPortal from './components/JewelerPortal';
 import Collection from './components/Collection';
+import ProductPage from './components/ProductPage';
+import Checkout from './components/Checkout';
+import ThankYou from './components/ThankYou';
 import Explore from './components/Explore';
 import OrderTracking from './components/OrderTracking';
 import Terms from './components/Terms';
@@ -24,6 +27,8 @@ import TutorialWizard from './components/TutorialWizard';
 import BookConsultation from './components/BookConsultation';
 import About from './components/About';
 import { LOGO_URL, TDG_ADDRESS } from './constants';
+import { loadProductsFromCsv } from './data/productsFromCsv';
+import { mergeCatalog } from './lib/catalogMerge';
 import RingSizeGuideModal from './components/RingSizeGuideModal';
 import PasswordRecoveryModal from './components/PasswordRecoveryModal';
 
@@ -83,7 +88,7 @@ const App: React.FC = () => {
           recentDesigns: designs.length ? designs : prev.recentDesigns,
           leads: leads.length ? leads : prev.leads
         }));
-        setCatalogProducts(catalog);
+        setCatalogProducts(mergeCatalog(loadProductsFromCsv(), catalog));
         setEmailFlows(flows);
         setJewelerSettings(settings as JewelerSettings | null);
         setSyncedOnce(true);
@@ -97,7 +102,7 @@ const App: React.FC = () => {
       Promise.all([fetchDesigns(), fetchLeads(), fetchCatalogProducts(), fetchEmailFlows(), fetchJewelerSettings()]).then(([designs, leads, catalog, flows, settings]) => {
         if (cancelled) return;
         setUserState(prev => ({ ...prev, recentDesigns: designs, leads }));
-        setCatalogProducts(catalog);
+        setCatalogProducts(mergeCatalog(loadProductsFromCsv(), catalog));
         setEmailFlows(flows);
         setJewelerSettings(settings as JewelerSettings | null);
       });
@@ -113,7 +118,9 @@ const App: React.FC = () => {
     const unsubLeads = subscribeLeads(leads => {
       setUserState(prev => ({ ...prev, leads }));
     });
-    const unsubCatalog = subscribeCatalogProducts(setCatalogProducts);
+    const unsubCatalog = subscribeCatalogProducts(supabaseCatalog => {
+      setCatalogProducts(mergeCatalog(loadProductsFromCsv(), supabaseCatalog));
+    });
     const unsubFlows = subscribeEmailFlows(setEmailFlows);
     return () => {
       unsubDesigns();
@@ -154,6 +161,18 @@ const App: React.FC = () => {
     await upsertDesigns(designs);
   }, []);
 
+  const handleOrderPlaced = useCallback(async (order: { design: JewelleryConfig; lead: Lead }) => {
+    const { design, lead } = order;
+    setUserState(prev => ({
+      ...prev,
+      recentDesigns: [design, ...prev.recentDesigns].slice(0, 50),
+      leads: [lead, ...prev.leads].slice(0, 100)
+    }));
+    await upsertDesign(design);
+    await upsertLead(lead);
+    // Email sequence: order_placed flow would be triggered by backend/webhook to send thank-you + follow-ups to customer
+  }, []);
+
   const handlePartnerNudge = (configId: string) => {
     const design = userState.recentDesigns.find(d => d.id === configId);
     if (!design) return;
@@ -186,15 +205,12 @@ const App: React.FC = () => {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [currentView, location.pathname]);
-  const navView: AppView = isBlog ? 'Blog' : currentView;
+  const navView: AppView = isBlog ? 'Blog' : (location.pathname.startsWith('/collection') ? 'Collection' : currentView);
 
   const handleNavTo = (view: AppView) => {
-    if (view === 'Blog') {
-      navigate('/blog');
-    } else {
-      navigate('/');
-      setCurrentView(view);
-    }
+    if (view === 'Blog') navigate('/blog');
+    else if (view === 'Collection') { navigate('/collection'); setCurrentView('Collection'); }
+    else { navigate('/'); setCurrentView(view); }
   };
 
   const mainPt = isBlog || currentView !== 'Home' ? 'pt-24' : 'pt-0';
@@ -223,15 +239,18 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/blog/:slug" element={<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="text-[10px] uppercase tracking-widest opacity-50">Loading…</span></div>}><Blog theme={userState.theme} onNavigateTo={handleNavTo} /></Suspense>} />
           <Route path="/blog" element={<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="text-[10px] uppercase tracking-widest opacity-50">Loading…</span></div>}><Blog theme={userState.theme} onNavigateTo={handleNavTo} /></Suspense>} />
+          <Route path="/collection" element={<Collection catalogProducts={catalogProducts} addLead={addLead} setView={setCurrentView} currency={userState.currency} theme={userState.theme} />} />
+          <Route path="/collection/:productId" element={<ProductPage catalogProducts={catalogProducts} setView={setCurrentView} currency={userState.currency} theme={userState.theme} />} />
+          <Route path="/checkout" element={<Checkout setView={setCurrentView} currency={userState.currency} theme={userState.theme} onOrderPlaced={handleOrderPlaced} />} />
+          <Route path="/thank-you" element={<ThankYou setView={setCurrentView} currency={userState.currency} theme={userState.theme} />} />
           <Route path="*" element={
             <>
               {currentView === 'Home' && <Home theme={userState.theme} onStart={() => setCurrentView('RingBuilder')} onLearn={() => setCurrentView('Learn')} />}
               {currentView === 'RingBuilder' && <RingBuilder userState={userState} onSave={saveDesign} onUpdateDraft={updateDraft} sessionUser={sessionUser} hasAuth={!!supabase} logoUrl={logoQuotes} onNavigateToExplore={() => handleNavTo('Explore')} />}
               {currentView === 'Learn' && <Learn onNavigate={setCurrentView} theme={userState.theme} />}
-              {currentView === 'Collection' && <Collection catalogProducts={catalogProducts} addLead={addLead} setView={setCurrentView} currency={userState.currency} />}
               {currentView === 'Explore' && <Explore designs={userState.recentDesigns} addLead={addLead} setView={setCurrentView} currency={userState.currency} />}
               {currentView === 'Resources' && <Resources logoUrl={logoVault} />}
-              {currentView === 'Chatbot' && <Chatbot onNavigate={setCurrentView} onLeadSubmit={addLead} />}
+              {currentView === 'Chatbot' && <Chatbot onNavigate={setCurrentView} onLeadSubmit={addLead} theme={userState.theme} />}
               {currentView === 'Portal' && <Portal userState={userState} setView={setCurrentView} onNudge={handlePartnerNudge} onEditDesign={handleEditDesign} hasAuth={!!supabase} sessionUser={sessionUser} />}
               {currentView === 'JewelerPortal' && <JewelerPortal userState={userState} onUpdate={updateAllDesigns} onLeadsUpdate={(leads) => { setUserState(prev => ({ ...prev, leads })); upsertLeads(leads); }} catalogProducts={catalogProducts} onCatalogUpdate={setCatalogProducts} emailFlows={emailFlows} onEmailFlowsUpdate={setEmailFlows} jewelerSettings={jewelerSettings} onJewelerSettingsRefresh={refreshJewelerSettings} sessionUser={sessionUser} />}
               {currentView === 'Track' && <OrderTracking designs={userState.recentDesigns} sessionUser={sessionUser} hasAuth={!!supabase} currency={userState.currency} onNavigate={handleNavTo} googleReviewUrl={jewelerSettings?.googleReviewUrl ?? undefined} />}
@@ -250,7 +269,7 @@ const App: React.FC = () => {
       <Footer theme={userState.theme} onNavigate={handleNavTo} onOpenTour={() => setTourOpen(true)} onOpenRingSizeGuide={() => setShowRingSizeGuide(true)} hours={jewelerSettings?.openingHours ?? undefined} logoUrl={logoFooter} address={jewelerSettings?.address ?? TDG_ADDRESS} />
       <RingSizeGuideModal isOpen={showRingSizeGuide} onClose={() => setShowRingSizeGuide(false)} theme={userState.theme} />
       <PasswordRecoveryModal isOpen={showPasswordRecovery} onClose={() => setShowPasswordRecovery(false)} theme={userState.theme} />
-      <FloatingConcierge onNavigate={handleNavTo} />
+      <FloatingConcierge onNavigate={handleNavTo} theme={userState.theme} />
       <TutorialWizard
         isOpen={tourOpen}
         onClose={() => setTourOpen(false)}

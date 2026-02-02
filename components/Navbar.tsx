@@ -246,9 +246,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
                     <p className="text-[9px] uppercase tracking-[0.35em] opacity-50 mb-3 font-medium">Your vault</p>
                     <div className="grid grid-cols-2 gap-3">
                       {NAV_ITEMS.filter((i) => i.id === 'Portal').map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => handleNav(item.id as AppView)}
+              <button
+                key={item.id}
+                onClick={() => handleNav(item.id as AppView)}
                           className={`flex flex-col items-center justify-center gap-2.5 py-6 px-4 rounded-2xl transition-all min-h-[100px] ${
                             isDark ? 'bg-white/10 hover:bg-white/18 border border-white/10' : 'bg-black/5 hover:bg-black/10 border border-black/10'
                           } ${currentView === item.id ? (isDark ? 'ring-2 ring-white/40' : 'ring-2 ring-black/30') : ''}`}
@@ -266,7 +266,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
                         >
                           <LogOut size={28} strokeWidth={1.5} className={isDark ? 'text-white' : 'text-black'} />
                           <span className="text-[10px] uppercase tracking-[0.2em] font-medium">Sign out</span>
-                        </button>
+              </button>
                       )}
                     </div>
                   </nav>

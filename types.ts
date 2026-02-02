@@ -23,8 +23,42 @@ export interface Lead {
   status: LeadStatus;
   nudgedByClient?: boolean;
   catalogProductId?: string;
-  source?: 'Chatbot' | 'Partner Nudge' | 'Ring Builder' | 'Collection Enquiry' | 'Manual' | 'Explore';
+  source?: 'Chatbot' | 'Partner Nudge' | 'Ring Builder' | 'Collection Enquiry' | 'Manual' | 'Explore' | 'Pre-config Order';
+  /** Order total (ZAR) for pre-config purchases. */
+  orderAmountZAR?: number;
   linkedDesignId?: string;
+}
+
+/** Single variant: metal/shape combo with its own price and optional image */
+export interface CatalogProductVariant {
+  metal: string;
+  shape: string;
+  priceZAR: number;
+  imageUrl?: string;
+}
+
+/** Checkout payload for pre-config product purchase */
+export interface PreConfigOrder {
+  product: CatalogProduct;
+  variantIndex: number;
+  priceZAR: number;
+  metal?: string;
+  shape?: string;
+  ringSize?: string;
+  ringSizeStandard?: string;
+  engraving?: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  address?: string;
+  notes?: string;
+}
+
+/** Product spec row parsed from Body HTML table */
+export interface ProductSpec {
+  label: string;
+  value: string;
 }
 
 /** Jeweler inventory item shown in client Collection; clients can enquire on it */
@@ -46,6 +80,10 @@ export interface CatalogProduct {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Metal/shape variants with per-variant pricing. When present, Collection shows metal/shape selectors. */
+  variants?: CatalogProductVariant[];
+  /** Parsed specs from Body HTML (band width, side stones, etc.) */
+  specs?: ProductSpec[];
 }
 
 export interface JewelleryConfig {
@@ -102,6 +140,8 @@ export interface JewelleryConfig {
   paystackReference?: string;
   /** When true or unset, design appears in the Explore feed. Set false to hide from Explore. */
   showInExplore?: boolean;
+  /** Links to catalog product for pre-config purchases. */
+  catalogProductId?: string;
 }
 
 export interface UserState {
@@ -113,7 +153,7 @@ export interface UserState {
   builderDraft?: Partial<JewelleryConfig>;
 }
 
-export type EmailFlowTriggerType = 'quote_approved' | 'status_update' | 'reminder' | 'promo' | 'custom';
+export type EmailFlowTriggerType = 'quote_approved' | 'status_update' | 'reminder' | 'promo' | 'order_placed' | 'custom';
 
 export interface EmailFlowFollowUp {
   delay_days: number;
@@ -135,7 +175,7 @@ export interface EmailFlow {
   updatedAt: string;
 }
 
-export type AppView = 'Home' | 'RingBuilder' | 'Learn' | 'Chatbot' | 'Portal' | 'Resources' | 'JewelerPortal' | 'Terms' | 'Blog' | 'Collection' | 'Explore' | 'Track' | 'Book' | 'About';
+export type AppView = 'Home' | 'RingBuilder' | 'Learn' | 'Chatbot' | 'Portal' | 'Resources' | 'JewelerPortal' | 'Terms' | 'Blog' | 'Collection' | 'Explore' | 'Track' | 'Book' | 'About' | 'ProductPage' | 'Checkout' | 'ThankYou';
 
 /** Jeweler plan tier; Growth and Pro include Live Diamond Sourcing (Nivoda). */
 export type JewelerPackageTier = 'starter' | 'growth' | 'pro';

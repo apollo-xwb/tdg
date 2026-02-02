@@ -5,10 +5,11 @@ export const EMAIL_FLOW_TRIGGER_LABELS: Record<EmailFlowTriggerType, string> = {
   status_update: 'Status update',
   reminder: 'Reminder',
   promo: 'Promotion',
+  order_placed: 'Order placed (pre-config)',
   custom: 'Custom'
 };
 
-export const VARIABLE_HINT = 'Variables: {{client_name}}, {{design_id}}, {{design_title}}, {{new_status}}, {{price_zar}}';
+export const VARIABLE_HINT = 'Variables: {{client_name}}, {{design_id}}, {{design_title}}, {{new_status}}, {{price_zar}}, {{product_title}}, {{order_id}}';
 
 export const DEFAULT_EMAIL_TEMPLATES: Omit<EmailFlow, 'id' | 'jewelerId' | 'createdAt' | 'updatedAt'>[] = [
   {
@@ -58,6 +59,25 @@ Use the payment link from our previous email. If you need a new link or have que
 Best regards,
 The Diamond Guy`,
     followUpDays: 3,
+    isActive: true,
+    followUps: []
+  },
+  {
+    name: 'Order placed (pre-config)',
+    triggerType: 'order_placed',
+    subjectTemplate: 'Thank you for your order {{order_id}} – {{product_title}}',
+    bodyTemplate: `Dear {{client_name}},
+
+Thank you for your order! We're excited to craft your {{product_title}}.
+
+ORDER REFERENCE: {{order_id}}
+AMOUNT: ZAR {{price_zar}}
+
+We'll be in touch shortly to confirm details and next steps. You can track your order anytime via the Track page on our site.
+
+Best regards,
+The Diamond Guy`,
+    followUpDays: null,
     isActive: true,
     followUps: []
   },

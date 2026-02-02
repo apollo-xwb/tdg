@@ -5,15 +5,19 @@ import { AppView } from '../types';
 
 interface Props {
   onNavigate: (view: AppView) => void;
+  theme?: 'dark' | 'light';
 }
 
-const FloatingConcierge: React.FC<Props> = ({ onNavigate }) => {
+const FloatingConcierge: React.FC<Props> = ({ onNavigate, theme = 'dark' }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const isDark = theme === 'dark';
 
   return (
     <div className="fixed bottom-8 right-8 z-[200] flex flex-col items-end gap-4 animate-fadeIn pointer-events-none">
       {isOpen && (
-        <div className="w-80 bg-[#121212] border border-white/10 rounded-sm shadow-2xl p-8 space-y-6 animate-fadeIn pointer-events-auto">
+        <div className={`w-80 rounded-sm shadow-2xl p-8 space-y-6 animate-fadeIn pointer-events-auto ${
+          isDark ? 'bg-[#121212] border border-white/10' : 'bg-white border border-gray-200 text-gray-900'
+        }`}>
           <div className="flex justify-between items-start">
             <div className="flex gap-4">
               <div className="relative">
@@ -36,14 +40,14 @@ const FloatingConcierge: React.FC<Props> = ({ onNavigate }) => {
             </button>
           </div>
 
-          <p className="text-xs font-light leading-relaxed opacity-60">
+          <p className={`text-xs font-light leading-relaxed ${isDark ? 'opacity-60' : 'text-gray-600'}`}>
             "Your master configuration is awaiting refinement. How should we proceed?"
           </p>
 
           <div className="grid gap-2">
-            <QuickLink label="Finish Builder" onClick={() => { onNavigate('RingBuilder'); setIsOpen(false); }} />
-            <QuickLink label="Private Vault" onClick={() => { onNavigate('Portal'); setIsOpen(false); }} />
-            <QuickLink label="Educational Hub" onClick={() => { onNavigate('Learn'); setIsOpen(false); }} />
+            <QuickLink label="Finish Builder" onClick={() => { onNavigate('RingBuilder'); setIsOpen(false); }} isDark={isDark} />
+            <QuickLink label="Private Vault" onClick={() => { onNavigate('Portal'); setIsOpen(false); }} isDark={isDark} />
+            <QuickLink label="Educational Hub" onClick={() => { onNavigate('Learn'); setIsOpen(false); }} isDark={isDark} />
           </div>
 
           <button 
