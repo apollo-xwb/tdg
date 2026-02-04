@@ -5,6 +5,7 @@ import { EXCHANGE_RATES, getMetalSwatchGradient, groupMetalsByType, parseMetalLa
 import { MessageSquare, X, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 import ProductModelViewer from './ProductModelViewer';
 import CustomSelect from './CustomSelect';
+import Showcase from './Showcase';
 
 type SortKey = 'newest' | 'price-asc' | 'price-desc' | 'type' | 'metal';
 
@@ -61,6 +62,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
   const [enquiryEmail, setEnquiryEmail] = useState('');
   const [enquiryPhone, setEnquiryPhone] = useState('');
   const [enquiryMessage, setEnquiryMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'collection' | 'showcase'>('collection');
 
   const active = useMemo(() => catalogProducts.filter(p => p.isActive !== false), [catalogProducts]);
 
@@ -148,41 +150,74 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
   const rate = EXCHANGE_RATES[currency]?.rate ?? 1;
 
   return (
-    <div className="max-w-6xl mx-auto px-6 lg:px-8 py-12 space-y-12 animate-fadeIn">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 border-b border-current/10 pb-12">
-        <div className="space-y-4">
-          <p className="text-[10px] uppercase tracking-[0.6em] text-emerald-500 font-bold">Curated designs</p>
-          <h1 className="text-5xl font-thin tracking-tighter uppercase">Collection</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-sm border text-[10px] uppercase tracking-wider font-bold transition-all ${
-              hasActiveFilters ? 'border-emerald-500/50 bg-emerald-500/10' : theme === 'dark' ? 'border-white/20 hover:bg-white/5' : 'border-gray-300 hover:bg-gray-100'
-            }`}
-          >
-            <SlidersHorizontal size={14} /> Filters {hasActiveFilters && `(${[filterShape, filterMetal, filterPriceMin, filterPriceMax].filter(Boolean).length})`}
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] uppercase opacity-68">Sort</span>
-            <CustomSelect
-              options={[
-                { value: 'newest', label: 'Newest' },
-                { value: 'price-asc', label: 'Price: low → high' },
-                { value: 'price-desc', label: 'Price: high → low' },
-                { value: 'type', label: 'Type' },
-                { value: 'metal', label: 'Metal' },
-              ]}
-              value={sortBy}
-              onChange={v => setSortBy(v as SortKey)}
-              theme={theme}
-              className="w-48"
-            />
+    <div className="w-full px-6 lg:px-8 py-12 animate-fadeIn">
+      <div className={activeTab === 'collection' ? 'max-w-6xl mx-auto space-y-12' : 'space-y-10'}>
+      <header className={`flex flex-col gap-6 pb-10 ${activeTab === 'collection' ? 'border-b border-current/10' : ''}`}>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+          <div className="space-y-3">
+            <p className="text-[10px] uppercase tracking-[0.6em] text-emerald-500 font-bold">Curated designs</p>
+            <h1 className="text-5xl font-thin tracking-tighter uppercase">Collection</h1>
+            <div className="inline-flex items-center gap-2 text-[9px] uppercase tracking-[0.25em]">
+              <button
+                type="button"
+                onClick={() => setActiveTab('collection')}
+                className={`px-3 py-1.5 rounded-full border text-[9px] font-semibold transition-all ${
+                  activeTab === 'collection'
+                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+                    : theme === 'dark'
+                      ? 'border-white/20 text-white/80 hover:bg-white/5'
+                      : 'border-gray-300 text-gray-800 hover:bg-gray-100'
+                }`}
+              >
+                Our collection
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('showcase')}
+                className={`px-3 py-1.5 rounded-full border text-[9px] font-semibold transition-all ${
+                  activeTab === 'showcase'
+                    ? 'bg-black text-white border-black shadow-sm'
+                    : theme === 'dark'
+                      ? 'border-white/20 text-white/80 hover:bg-white/5'
+                      : 'border-gray-300 text-gray-800 hover:bg-gray-100'
+                }`}
+              >
+                Online showcase
+              </button>
+            </div>
           </div>
+          {activeTab === 'collection' && (
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-sm border text-[10px] uppercase tracking-wider font-bold transition-all ${
+                  hasActiveFilters ? 'border-emerald-500/50 bg-emerald-500/10' : theme === 'dark' ? 'border-white/20 hover:bg-white/5' : 'border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                <SlidersHorizontal size={14} /> Filters {hasActiveFilters && `(${[filterShape, filterMetal, filterPriceMin, filterPriceMax].filter(Boolean).length})`}
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] uppercase opacity-68">Sort</span>
+                <CustomSelect
+                  options={[
+                    { value: 'newest', label: 'Newest' },
+                    { value: 'price-asc', label: 'Price: low → high' },
+                    { value: 'price-desc', label: 'Price: high → low' },
+                    { value: 'type', label: 'Type' },
+                    { value: 'metal', label: 'Metal' },
+                  ]}
+                  value={sortBy}
+                  onChange={v => setSortBy(v as SortKey)}
+                  theme={theme}
+                  className="w-48"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
-      {showFilters && (
+      {activeTab === 'collection' && showFilters && (
         <div className={`p-6 rounded-sm border ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'} space-y-6 animate-fadeIn`}>
           <h3 className="text-[10px] uppercase tracking-widest font-bold">Filter by</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -291,9 +326,10 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
         </div>
       )}
 
-      {sorted.length === 0 ? (
-        <p className="text-center py-24 opacity-60 uppercase tracking-widest text-[10px]">No designs in the collection yet. Check back soon.</p>
-      ) : (
+      {activeTab === 'collection' ? (
+        sorted.length === 0 ? (
+          <p className="text-center py-24 opacity-60 uppercase tracking-widest text-[10px]">No designs in the collection yet. Check back soon.</p>
+        ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {sorted.map(p => {
             const variantIdx = selectedVariantByProduct[p.id] ?? 0;
@@ -424,9 +460,13 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
             );
           })}
         </div>
+        )
+      ) : (
+        <Showcase theme={theme} />
       )}
+      </div>
 
-      {enquiryProduct && (
+      {activeTab === 'collection' && enquiryProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 animate-fadeIn" onClick={() => setEnquiryProduct(null)}>
           <div className="glass border border-white/10 rounded-sm p-8 max-w-md w-full space-y-6 animate-fadeIn" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center">

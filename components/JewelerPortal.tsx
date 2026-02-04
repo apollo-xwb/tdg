@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
+import { GoogleGenAI } from '@google/genai';
 import { UserState, JewelleryConfig, OrderStatus, Lead, CatalogProduct, LeadStatus, EmailFlow, EmailFlowTriggerType, JewelerSettings, Appointment, JewelerAvailabilitySlot, OpeningHoursEntry, VaultGuide, BlogPost } from '../types';
 import { getJewelerEmail, supabase, signOut, updatePassword, fetchCatalogProducts, upsertCatalogProduct, deleteCatalogProduct, fetchEmailFlows, upsertEmailFlow, deleteEmailFlow, upsertJewelerSettings, fetchAppointments, fetchJewelerAvailability, upsertJewelerAvailabilitySlot, deleteJewelerAvailabilitySlot, updateAppointment, fetchVaultGuidesAdmin, upsertVaultGuide, deleteVaultGuide, fetchBlogPostsAdmin, upsertBlogPost, deleteBlogPost, uploadJewelerAsset } from '../lib/supabase';
 import { calculateQuotePrice } from '../lib/quotePrice';
@@ -192,6 +193,21 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
   const [editingBlogId, setEditingBlogId] = useState<string | null>(null);
   const [addingBlog, setAddingBlog] = useState(false);
 
+  // AI email icebreaker state
+  const [icebreakerUrl, setIcebreakerUrl] = useState('');
+  const [icebreakerContent, setIcebreakerContent] = useState('');
+  const [icebreakerResult, setIcebreakerResult] = useState('');
+  const [icebreakerLoading, setIcebreakerLoading] = useState(false);
+  const [icebreakerError, setIcebreakerError] = useState<string | null>(null);
+
+  // Image-based design chat (jeweler-side)
+  const [designChatImage, setDesignChatImage] = useState<string | null>(null);
+  const [designChatQuestion, setDesignChatQuestion] = useState('');
+  const [designChatAnswer, setDesignChatAnswer] = useState('');
+  const [designChatSpec, setDesignChatSpec] = useState<any | null>(null);
+  const [designChatLoading, setDesignChatLoading] = useState(false);
+  const [designChatError, setDesignChatError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!jewelerEmail) return;
     const from = new Date();
@@ -245,6 +261,205 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
     if (tab === 'Guides' && jewelerEmail) fetchVaultGuidesAdmin(jewelerEmail).then(setVaultGuides);
   }, [tab, jewelerEmail]);
 
+  const handleGenerateIcebreaker = async () => {
+    setIcebreakerError(null);
+    if (!icebreakerUrl.trim() && !icebreakerContent.trim()) {
+      setIcebreakerError('Add a website URL or paste some text first.');
+      return;
+    }
+    if (!process.env.API_KEY) {
+      setIcebreakerError('Missing Gemini API key. Please configure API_KEY in your environment.');
+      return;
+    }
+    setIcebreakerLoading(true);
+    try {
+      let content = icebreakerContent.trim();
+
+      // Try to fetch website content if URL is provided and no manual content yet
+      if (!content && icebreakerUrl.trim()) {
+        try {
+          const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(icebreakerUrl.trim())}`;
+          const res = await fetch(proxied);
+          const html = await res.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          ['script', 'style', 'noscript', 'iframe', 'footer', 'header'].forEach(sel => {
+            doc.querySelectorAll(sel).forEach(el => el.remove());
+          });
+          const text = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim();
+          content = text.slice(0, 4000);
+          setIcebreakerContent(content);
+        } catch (e) {
+          console.error('Failed to fetch website content', e);
+        }
+      }
+
+      if (!content) {
+        setIcebreakerError('Could not fetch any readable content from that URL.');
+        return;
+      }
+
+      const prompt = `
+You are helping me write personalized cold emails to independent jewelry store owners. 
+I will give you the visible text content from their website.
+
+Analyze the content and extract:
+- Main focus / specialty (e.g., custom engagement rings, lab-grown diamonds, vintage pieces, ethnic designs, bridal only, etc.)
+- Any unique details (e.g., specific styles, handcrafted, sustainable sourcing, location, family-owned details)
+- Implied pain points (e.g., heavy emphasis on bespoke/custom work, lots of product variations, diamond education)
+- 2–4 very specific, natural-sounding sentences or phrases I can use in a cold email to show I actually looked at their site 
+  (keep them warm, helpful, and non-salesy – like something a fellow jeweler would notice)
+
+Output ONLY this bullet list format – nothing else:
+
+- Specialty: ...
+- Unique details: ...
+- Implied pain points: ...
+- Personalization phrases:
+  - Phrase one
+  - Phrase two
+  - etc.
+
+Website content:
+${content}
+      `.trim();
+
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+      });
+      const text = (response as any).text?.trim?.() || (response as any).candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('\n') || '';
+      setIcebreakerResult(text || 'No response generated.');
+    } catch (e) {
+      console.error('Gemini error while generating icebreaker', e);
+      setIcebreakerError('Something went wrong while generating the icebreaker. Please try again.');
+    } finally {
+      setIcebreakerLoading(false);
+    }
+  };
+
+  const handleDesignImageChat = async () => {
+    setDesignChatError(null);
+    if (!designChatImage) {
+      setDesignChatError('Upload or drop a reference image first.');
+      return;
+    }
+    if (!designChatQuestion.trim()) {
+      setDesignChatError('Ask a question or describe the requested changes.');
+      return;
+    }
+    if (!process.env.API_KEY) {
+      setDesignChatError('Missing Gemini API key. Please configure API_KEY in your environment.');
+      return;
+    }
+    setDesignChatLoading(true);
+    try {
+      setDesignChatSpec(null);
+      let mimeType: string | undefined;
+      let data: string | undefined;
+
+      if (designChatImage.startsWith('data:')) {
+        const m = designChatImage.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+        if (m) {
+          mimeType = m[1];
+          data = m[2];
+        }
+      }
+
+      const baseInstruction = `
+You are acting as an expert jeweler and CAD designer advising another jeweler.
+
+They have uploaded a client reference ring image and are asking how to adapt it
+for a custom piece (for example: "this ring but in rose gold with diamonds on the side").
+
+Your goal is to help them build a clear spec for a quote in our system.
+
+Based on the image and their question:
+- Describe the current design (metal colour, stone shape, setting, band, side stones) in 2–3 short sentences.
+- Explain clearly what changes would be required to match the request.
+- Suggest a concrete spec summary they can paste into a quote.
+
+VERY IMPORTANT – OUTPUT FORMAT:
+- Return ONLY a single JSON object (no prose, no markdown).
+- The JSON must have this exact shape:
+{
+  "description": "short natural language description of the current design",
+  "adjustments": "short natural language explanation of how to change it per the request",
+  "spec": {
+    "metal": "Platinum | Yellow Gold | White Gold | Rose Gold | 18K Gold | 14K Gold | Sterling Silver | Other",
+    "stoneType": "Natural | Lab | Moissanite | N/A",
+    "stoneCategory": "Diamond | Sapphire | Emerald | Ruby | Moissanite | Aquamarine | Amethyst | None | Other",
+    "shape": "Round | Princess | Oval | Cushion | Emerald | Pear | Marquise | Heart | Asscher | Radiant | N/A",
+    "settingStyle": "Solitaire | Halo | Pave | Trilogy | Emerald Accents | Sapphire Accents",
+    "carat": number | null,
+    "caratMin": number | null,
+    "caratMax": number | null,
+    "notes": "any extra production notes or caveats"
+  },
+  "followUps": ["question one", "question two"]
+}
+
+- If you need more information from the jeweler (for example metal choice, carat range, budget, side stone preferences),
+  include up to 3 short follow-up questions in the followUps array. If you don't need anything else, use [].
+- If you are unsure of a field, use null for numbers and a best-effort guess from the allowed strings for enums.
+- Do NOT include any keys other than description, adjustments, spec and followUps.
+- Do NOT mention AI or models anywhere.
+      `.trim();
+
+      const parts: any[] = [
+        { text: `${baseInstruction}\n\nJeweler question: ${designChatQuestion}` }
+      ];
+      if (mimeType && data) {
+        parts.push({ inlineData: { data, mimeType } });
+      }
+
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{ role: 'user', parts }],
+        config: { responseMimeType: 'application/json' }
+      });
+
+      const raw = (response as any).text?.trim?.() || '';
+      let parsed: any = null;
+      try {
+        parsed = raw ? JSON.parse(raw) : null;
+      } catch {
+        console.warn('Failed to parse design chat JSON, falling back to raw text');
+      }
+
+      if (parsed && parsed.spec) {
+        setDesignChatSpec(parsed);
+        const prettyParts: string[] = [
+          parsed.description,
+          '',
+          parsed.adjustments,
+          '',
+          'Spec:',
+          JSON.stringify(parsed.spec, null, 2)
+        ];
+        if (Array.isArray(parsed.followUps) && parsed.followUps.length) {
+          prettyParts.push('');
+          prettyParts.push('Follow-up questions:');
+          parsed.followUps.forEach((q: string) => {
+            if (q) prettyParts.push(`- ${q}`);
+          });
+        }
+        const pretty = prettyParts.filter(Boolean).join('\n');
+        setDesignChatAnswer(pretty);
+      } else {
+        const fallbackText = raw || 'No response generated.';
+        setDesignChatAnswer(fallbackText);
+      }
+    } catch (e) {
+      console.error('Gemini error while generating design chat', e);
+      setDesignChatError('Something went wrong while analysing the image. Please try again.');
+    } finally {
+      setDesignChatLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (tab === 'Blog' && jewelerEmail) fetchBlogPostsAdmin(jewelerEmail).then(setBlogPosts);
   }, [tab, jewelerEmail]);
@@ -255,6 +470,39 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
   });
   const effectiveMarginPercent = newQuote.marginPercent ?? jewelerSettings?.pricingRules?.defaultMarginPercent ?? defaultMarginPercent;
   const computedQuotePrice = calculateQuotePrice(newQuote, 1 + effectiveMarginPercent / 100, jewelerSettings?.pricingRules ?? undefined);
+
+  const applyDesignChatSpecToQuote = () => {
+    if (!designChatSpec || !designChatSpec.spec) return;
+    const s = designChatSpec.spec;
+    setNewQuote(prev => {
+      const next: Partial<JewelleryConfig> = { ...prev };
+      if (s.metal) next.metal = s.metal as any;
+      if (s.stoneType) next.stoneType = s.stoneType as any;
+      if (s.stoneCategory) next.stoneCategory = s.stoneCategory as any;
+      if (s.shape) next.shape = s.shape as any;
+      if (s.settingStyle) next.settingStyle = s.settingStyle as any;
+      if (typeof s.carat === 'number' && s.carat > 0) {
+        next.carat = s.carat;
+      } else if ((typeof s.caratMin === 'number' && s.caratMin > 0) || (typeof s.caratMax === 'number' && s.caratMax > 0)) {
+        const min = typeof s.caratMin === 'number' && s.caratMin > 0 ? s.caratMin : s.caratMax;
+        const max = typeof s.caratMax === 'number' && s.caratMax > 0 ? s.caratMax : s.caratMin;
+        if (min && max) next.carat = (min + max) / 2;
+        else next.carat = (min || max) || next.carat;
+      }
+      if (s.notes) {
+        const existing = next.designDescription || '';
+        next.designDescription = existing ? `${existing}\n\nAI spec notes: ${s.notes}` : `AI spec notes: ${s.notes}`;
+      }
+      if (designChatSpec.description || designChatSpec.adjustments) {
+        const summary = `${designChatSpec.description || ''}\n\n${designChatSpec.adjustments || ''}`.trim();
+        if (summary) {
+          const existing = next.designDescription || '';
+          next.designDescription = existing ? `${existing}\n\nSummary: ${summary}` : `Summary: ${summary}`;
+        }
+      }
+      return next;
+    });
+  };
 
   const handleUpdate = (id: string, updates: Partial<JewelleryConfig>) => {
     const next = userState.recentDesigns.map(d => d.id === id ? { ...d, ...updates } : d);
@@ -437,6 +685,8 @@ For questions, please contact our concierge.`;
     return <JewelerLogin jewelerEmail={jewelerEmail} onSuccess={() => {}} />;
   }
 
+  const isDarkTheme = userState.theme === 'dark';
+
   const TAB_ITEMS: { id: typeof tab; label: string; icon: React.ReactNode; count?: number }[] = [
     { id: 'Board', label: 'Production Board', icon: <LayoutGrid size={28} strokeWidth={1.5} /> },
     { id: 'Orders', label: 'Orders', icon: <List size={28} strokeWidth={1.5} />, count: userState.recentDesigns.length },
@@ -478,14 +728,28 @@ For questions, please contact our concierge.`;
               key={id}
               type="button"
               onClick={() => handleTabClick(id)}
-              className={`flex flex-col items-center justify-center gap-2.5 py-6 px-4 rounded-2xl transition-all min-h-[100px] bg-white/10 hover:bg-white/18 border border-white/10 ${
-                tab === id ? 'ring-2 ring-white/40' : ''
-              }`}
+              className={[
+                'flex flex-col items-center justify-center gap-2.5 py-6 px-4 rounded-2xl transition-all min-h-[100px] text-[10px] uppercase tracking-[0.2em] font-medium',
+                isDarkTheme
+                  ? 'bg-white/10 hover:bg-white/20 border border-white/12 text-white'
+                  : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-900 shadow-sm',
+                tab === id
+                  ? (isDarkTheme ? 'ring-2 ring-white/40' : 'ring-2 ring-emerald-400/70')
+                  : ''
+              ].join(' ')}
             >
-              <span className="text-white">{icon}</span>
-              <span className="text-[10px] uppercase tracking-[0.2em] font-medium">{label}</span>
+              <span
+                className={
+                  tab === id
+                    ? (isDarkTheme ? 'text-emerald-300' : 'text-emerald-500')
+                    : (isDarkTheme ? 'text-white/80' : 'text-slate-700')
+                }
+              >
+                {icon}
+              </span>
+              <span className={tab === id ? '' : isDarkTheme ? 'opacity-80' : 'opacity-90'}>{label}</span>
               {count != null && count > 0 && (
-                <span className="text-[9px] opacity-70">({count})</span>
+                <span className="text-[9px] opacity-60">({count})</span>
               )}
             </button>
           ))}
@@ -813,11 +1077,12 @@ For questions, please contact our concierge.`;
         ))}
 
         {tab === 'NewQuote' && (
-          <div className="glass border border-white/10 rounded-sm p-8 space-y-8 animate-fadeIn max-w-4xl">
-            <h3 className="text-[11px] uppercase tracking-widest font-bold">Quote from specs</h3>
-            <p className="text-[10px] opacity-68">Set specs and default margin. Price is calculated from your formula and margin.</p>
-            <div className="grid md:grid-cols-2 gap-8">
-              <div className="space-y-4">
+          <div className="space-y-8 animate-fadeIn max-w-6xl">
+            <div className="glass border border-white/10 rounded-sm p-8 space-y-8">
+              <h3 className="text-[11px] uppercase tracking-widest font-bold">Quote from specs</h3>
+              <p className="text-[10px] opacity-68">Set specs and default margin. Price is calculated from your formula and margin.</p>
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Margin % (uses Settings default when saved)</label>
                 <input type="number" min={0} max={200} value={effectiveMarginPercent} onChange={e => { const v = parseInt(e.target.value) || 0; setDefaultMarginPercent(v); localStorage.setItem('jeweler_margin_pct', String(v)); }} className="w-24 bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none" />
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Type</label>
@@ -882,6 +1147,111 @@ For questions, please contact our concierge.`;
                 <button onClick={handleFinishQuote} className="w-full py-4 bg-white text-black text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200 mt-4">
                   Create quote
                 </button>
+              </div>
+            </div>
+            </div>
+
+            <div className="glass border border-white/10 rounded-sm p-8 space-y-6">
+              <h3 className="text-[11px] uppercase tracking-widest font-bold flex items-center gap-2">
+                <Sparkles size={14} /> AI Design Assistant (Image Chat)
+              </h3>
+              <p className="text-[10px] opacity-68">
+                Drop a client&apos;s reference ring image and chat through changes (e.g. &quot;this in 18K rose gold with a hidden halo&quot;). Use the response as notes for your quote.
+              </p>
+              <div className="flex flex-col lg:flex-row gap-6">
+                <div className="w-full lg:w-40 shrink-0 space-y-2">
+                  <label className="text-[8px] uppercase opacity-68 font-bold block">Reference image</label>
+                  <div
+                    className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${designChatImage ? 'border-white/25 bg-white/5' : 'border-white/12 hover:border-white/40 hover:bg-white/5'}`}
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="design-chat-upload"
+                      className="hidden"
+                      onChange={e => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        const r = new FileReader();
+                        r.onload = () => setDesignChatImage(String(r.result));
+                        r.readAsDataURL(f);
+                      }}
+                    />
+                    {designChatImage ? (
+                      <img src={designChatImage} alt="Reference" className="max-h-32 mx-auto object-contain rounded-md" />
+                    ) : (
+                      <label htmlFor="design-chat-upload" className="cursor-pointer flex flex-col items-center gap-2 text-[9px] opacity-70">
+                        <Upload size={18} className="opacity-60" />
+                        <span className="uppercase tracking-widest">Drop or click to upload</span>
+                        <span className="text-[8px] opacity-60">Screenshots, Pinterest, CAD renders all work.</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-1 flex flex-col gap-3">
+                  <div className="bg-black/40 border border-white/10 rounded-lg p-3 min-h-[140px] max-h-72 overflow-y-auto space-y-3">
+                    {!designChatQuestion && !designChatAnswer && (
+                      <div className="text-[10px] opacity-45">
+                        Example: <span className="italic">&quot;Keep this exact layout, but 18K yellow gold with a slimmer band and a hidden halo.&quot;</span>
+                      </div>
+                    )}
+                    {designChatQuestion && (
+                      <div className="flex justify-end">
+                        <div className="max-w-[80%] bg-emerald-500/10 border border-emerald-400/40 rounded-2xl rounded-br-sm px-3 py-2 text-[10px]">
+                          {designChatQuestion}
+                        </div>
+                      </div>
+                    )}
+                    {designChatAnswer && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[85%] bg-white/5 border border-white/15 rounded-2xl rounded-bl-sm px-3 py-2 text-[10px] whitespace-pre-wrap leading-relaxed">
+                          {designChatAnswer}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <label className="sr-only">Describe requested change</label>
+                        <input
+                          type="text"
+                          value={designChatQuestion}
+                          onChange={e => setDesignChatQuestion(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              if (!designChatLoading) handleDesignImageChat();
+                            }
+                          }}
+                          placeholder="Describe what the client wants changed…"
+                          className="w-full bg-black/60 border border-white/15 rounded-full px-4 py-2 text-[11px] font-light focus:outline-none focus:border-emerald-400/60"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDesignImageChat}
+                        disabled={designChatLoading}
+                        className="h-9 px-4 rounded-full bg-white text-black text-[9px] uppercase tracking-widest font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {designChatLoading ? 'Analysing…' : 'Send'}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[9px] text-red-400/80 min-h-[1em]">
+                        {designChatError}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={applyDesignChatSpecToQuote}
+                        disabled={!designChatSpec}
+                        className="px-3 py-1 rounded-full border border-emerald-400/60 text-emerald-300 text-[8px] uppercase tracking-widest hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Apply spec to quote
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -987,55 +1357,116 @@ For questions, please contact our concierge.`;
         )}
 
         {tab === 'Email' && (
-          <EmailFlowsTab
-            flows={emailFlows}
-            form={flowForm}
-            setForm={setFlowForm}
-            editingId={editingFlowId}
-            setEditingId={setEditingFlowId}
-            onSave={async (f) => {
-              const now = new Date().toISOString();
-              const full: EmailFlow = {
-                id: f.id || `flow-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                jewelerId: jewelerEmail || 'default',
-                name: f.name || 'Untitled',
-                triggerType: (f.triggerType || 'custom') as EmailFlowTriggerType,
-                subjectTemplate: f.subjectTemplate || '',
-                bodyTemplate: f.bodyTemplate || '',
-                followUpDays: f.followUpDays ?? null,
-                isActive: f.isActive !== false,
-                followUps: Array.isArray(f.followUps) ? f.followUps : [],
-                createdAt: (f as EmailFlow).createdAt || now,
-                updatedAt: now
-              };
-              await upsertEmailFlow(full);
-              const next = await fetchEmailFlows(jewelerEmail || undefined);
-              onEmailFlowsUpdate?.(next);
-              setEditingFlowId(null);
-              setFlowForm({});
-            }}
-            onDelete={async (id) => {
-              if (!confirm('Delete this email flow?')) return;
-              await deleteEmailFlow(id);
-              const next = await fetchEmailFlows(jewelerEmail || undefined);
-              onEmailFlowsUpdate?.(next);
-              if (editingFlowId === id) { setEditingFlowId(null); setFlowForm({}); }
-            }}
-            onDuplicate={async (flow) => {
-              const copy: EmailFlow = { ...flow, id: `flow-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: `${flow.name} (copy)`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-              await upsertEmailFlow(copy);
-              const next = await fetchEmailFlows(jewelerEmail || undefined);
-              onEmailFlowsUpdate?.(next);
-            }}
-            onAddFromTemplate={(t) => {
-              const flow = createFlowFromTemplate(t, jewelerEmail || 'default');
-              setFlowForm(flow);
-              setEditingFlowId(flow.id);
-            }}
-            templates={DEFAULT_EMAIL_TEMPLATES}
-            triggerLabels={EMAIL_FLOW_TRIGGER_LABELS}
-            variableHint={VARIABLE_HINT}
-          />
+          <div className="space-y-10 animate-fadeIn">
+            <div className="glass border border-white/10 rounded-sm p-6 space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-[11px] uppercase tracking-widest font-bold flex items-center gap-2">
+                    <Sparkles size={14} /> AI Email Icebreakers
+                  </h3>
+                  <p className="text-[9px] uppercase opacity-68 mt-1">
+                    Paste a jeweler&apos;s website or about text and get ready-made personalization bullets for cold emails.
+                  </p>
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Website URL (optional)</label>
+                    <input
+                      type="url"
+                      value={icebreakerUrl}
+                      onChange={e => setIcebreakerUrl(e.target.value)}
+                      placeholder="https://example-jeweler.com"
+                      className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Website content / About text</label>
+                    <textarea
+                      rows={7}
+                      value={icebreakerContent}
+                      onChange={e => setIcebreakerContent(e.target.value)}
+                      placeholder="Paste visible text from their homepage or About page…"
+                      className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none resize-y"
+                    />
+                    <p className="text-[8px] opacity-55 mt-1">
+                      Tip: If URL scraping fails, just copy/paste a paragraph from their site here.
+                    </p>
+                  </div>
+                  {icebreakerError && (
+                    <p className="text-[9px] text-red-400/80">{icebreakerError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleGenerateIcebreaker}
+                    disabled={icebreakerLoading}
+                    className="px-6 py-2 bg-white text-black text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {icebreakerLoading ? 'Generating…' : 'Generate icebreakers'}
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <label className="text-[8px] uppercase opacity-68 font-bold block">Gemini personalization output</label>
+                  <div className="bg-black/40 border border-white/10 rounded-sm p-3 min-h-[160px] text-[10px] whitespace-pre-wrap leading-relaxed">
+                    {icebreakerResult
+                      ? icebreakerResult
+                      : <span className="opacity-40">Your bullet list will appear here. You can copy/paste it straight into your cold email opener.</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <EmailFlowsTab
+              flows={emailFlows}
+              form={flowForm}
+              setForm={setFlowForm}
+              editingId={editingFlowId}
+              setEditingId={setEditingFlowId}
+              onSave={async (f) => {
+                const now = new Date().toISOString();
+                const full: EmailFlow = {
+                  id: f.id || `flow-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  jewelerId: jewelerEmail || 'default',
+                  name: f.name || 'Untitled',
+                  triggerType: (f.triggerType || 'custom') as EmailFlowTriggerType,
+                  subjectTemplate: f.subjectTemplate || '',
+                  bodyTemplate: f.bodyTemplate || '',
+                  followUpDays: f.followUpDays ?? null,
+                  isActive: f.isActive !== false,
+                  followUps: Array.isArray(f.followUps) ? f.followUps : [],
+                  createdAt: (f as EmailFlow).createdAt || now,
+                  updatedAt: now
+                };
+                await upsertEmailFlow(full);
+                const next = await fetchEmailFlows(jewelerEmail || undefined);
+                onEmailFlowsUpdate?.(next);
+                setEditingFlowId(null);
+                setFlowForm({});
+              }}
+              onDelete={async (id) => {
+                if (!confirm('Delete this email flow?')) return;
+                await deleteEmailFlow(id);
+                const next = await fetchEmailFlows(jewelerEmail || undefined);
+                onEmailFlowsUpdate?.(next);
+                if (editingFlowId === id) { setEditingFlowId(null); setFlowForm({}); }
+              }}
+              onDuplicate={async (flow) => {
+                const copy: EmailFlow = { ...flow, id: `flow-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: `${flow.name} (copy)`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+                await upsertEmailFlow(copy);
+                const next = await fetchEmailFlows(jewelerEmail || undefined);
+                onEmailFlowsUpdate?.(next);
+              }}
+              onAddFromTemplate={(t) => {
+                const flow = createFlowFromTemplate(t, jewelerEmail || 'default');
+                setFlowForm(flow);
+                setEditingFlowId(flow.id);
+              }}
+              templates={DEFAULT_EMAIL_TEMPLATES}
+              triggerLabels={EMAIL_FLOW_TRIGGER_LABELS}
+              variableHint={VARIABLE_HINT}
+            />
+          </div>
         )}
 
         {tab === 'Calendar' && (

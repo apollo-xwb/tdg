@@ -812,6 +812,12 @@ const renderStep = (name: string, config: any, setConfig: any, step: number, tot
 const DesignInspirationStep = ({ config, update, onFetchLink }: { config: any; update: (u: any) => void; onFetchLink: (url: string) => Promise<boolean> }) => {
   const [linkFetching, setLinkFetching] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiAnswer, setAiAnswer] = useState('');
+  const [aiSpec, setAiSpec] = useState<any | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const handleFetch = async () => {
     const url = (config.pinterestLink || '').trim();
     if (!url) return;
@@ -820,7 +826,154 @@ const DesignInspirationStep = ({ config, update, onFetchLink }: { config: any; u
     setLinkFetching(false);
     if (!ok) setLinkError('Could not fetch image from link.');
   };
+
   const displayUrl = config.designInspirationUrl;
+
+  const applyAiSpecToConfig = () => {
+    if (!aiSpec || !aiSpec.spec) return;
+    const s = aiSpec.spec;
+    const next: any = { ...config };
+    if (s.metal) next.metal = s.metal;
+    if (s.stoneType) next.stoneType = s.stoneType;
+    if (s.stoneCategory) next.stoneCategory = s.stoneCategory;
+    if (s.shape) next.shape = s.shape;
+    if (s.settingStyle) next.settingStyle = s.settingStyle;
+    if (typeof s.carat === 'number' && s.carat > 0) {
+      next.carat = s.carat;
+    } else if ((typeof s.caratMin === 'number' && s.caratMin > 0) || (typeof s.caratMax === 'number' && s.caratMax > 0)) {
+      const min = typeof s.caratMin === 'number' && s.caratMin > 0 ? s.caratMin : s.caratMax;
+      const max = typeof s.caratMax === 'number' && s.caratMax > 0 ? s.caratMax : s.caratMin;
+      if (min && max) next.carat = (min + max) / 2;
+      else next.carat = (min || max) || next.carat;
+    }
+    if (s.notes) {
+      const existing = next.designDescription || '';
+      next.designDescription = existing ? `${existing}\n\nAI image notes: ${s.notes}` : `AI image notes: ${s.notes}`;
+    }
+    update(next);
+  };
+
+  const handleImageChat = async () => {
+    setAiError(null);
+    if (!displayUrl) {
+      setAiError('Upload an image or add an image link first.');
+      return;
+    }
+    if (!aiQuestion.trim()) {
+      setAiError('Ask a question about the design.');
+      return;
+    }
+    if (!process.env.API_KEY) {
+      setAiError('Missing Gemini API key. Please configure API_KEY in your environment.');
+      return;
+    }
+    setAiLoading(true);
+    try {
+      setAiSpec(null);
+      let mimeType: string | undefined;
+      let data: string | undefined;
+
+      if (displayUrl.startsWith('data:')) {
+        const m = displayUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+        if (m) {
+          mimeType = m[1];
+          data = m[2];
+        }
+      }
+
+      const baseInstruction = `
+You are an expert fine jewelry designer helping a client customize a ring based on a reference image.
+They may say things like "this ring but in rose gold with diamonds on the side".
+
+Your goal is to help them arrive at a clear configuration for our ring builder.
+
+Given the reference image and their question:
+- Describe the design in 2–3 short sentences (style, metal, stones, setting).
+- Explain how to adjust it to match their request (e.g. change metal, add side stones, adjust band width).
+- Suggest a concrete configuration they can apply.
+
+VERY IMPORTANT – OUTPUT FORMAT:
+- Return ONLY a single JSON object (no prose, no markdown).
+- The JSON must have this exact shape:
+{
+  "description": "short natural language description of the current design",
+  "adjustments": "short natural language explanation of how to change it per the request",
+  "spec": {
+    "metal": "Platinum | Yellow Gold | White Gold | Rose Gold | 18K Gold | 14K Gold | Sterling Silver | Other",
+    "stoneType": "Natural | Lab | Moissanite | N/A",
+    "stoneCategory": "Diamond | Sapphire | Emerald | Ruby | Moissanite | Aquamarine | Amethyst | None | Other",
+    "shape": "Round | Princess | Oval | Cushion | Emerald | Pear | Marquise | Heart | Asscher | Radiant | N/A",
+    "settingStyle": "Solitaire | Halo | Pave | Trilogy | Emerald Accents | Sapphire Accents",
+    "carat": number | null,
+    "caratMin": number | null,
+    "caratMax": number | null,
+    "notes": "any extra notes in friendly language"
+  },
+  "followUps": ["question one", "question two"]
+}
+
+- If you need more information from the client (for example ring size, metal preference, stone type, budget),
+  include up to 3 short follow-up questions in the followUps array. If you don't need anything else, use [].
+- If you are unsure of a field, use null for numbers and a best-effort guess from the allowed strings for enums.
+- Do NOT include any keys other than description, adjustments, spec and followUps.
+- Do NOT mention AI or models anywhere.
+      `.trim();
+
+      const parts: any[] = [
+        { text: `${baseInstruction}\n\nClient question: ${aiQuestion}` }
+      ];
+      if (mimeType && data) {
+        parts.push({ inlineData: { data, mimeType } });
+      } else {
+        parts.push({ text: `Reference image URL (if accessible): ${displayUrl}` });
+      }
+
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{ role: 'user', parts }],
+        config: { responseMimeType: 'application/json' }
+      });
+
+      const raw = (response as any).text?.trim?.() || '';
+      let parsed: any = null;
+      try {
+        parsed = raw ? JSON.parse(raw) : null;
+      } catch {
+        console.warn('Failed to parse image chat JSON, falling back to raw text');
+      }
+
+      if (parsed && parsed.spec) {
+        setAiSpec(parsed);
+        const prettyParts: string[] = [
+          parsed.description,
+          '',
+          parsed.adjustments,
+          '',
+          'Suggested spec:',
+          JSON.stringify(parsed.spec, null, 2)
+        ];
+        if (Array.isArray(parsed.followUps) && parsed.followUps.length) {
+          prettyParts.push('');
+          prettyParts.push('Follow-up questions:');
+          parsed.followUps.forEach((q: string) => {
+            if (q) prettyParts.push(`- ${q}`);
+          });
+        }
+        const pretty = prettyParts.filter(Boolean).join('\n');
+        setAiAnswer(pretty);
+      } else {
+        const fallbackText = raw || 'No response generated.';
+        setAiAnswer(fallbackText);
+      }
+    } catch (e) {
+      console.error('Gemini image chat error', e);
+      setAiError('Something went wrong while talking about the image. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-8 py-4">
       <p className="text-[11px] uppercase tracking-widest opacity-60">Would you like to upload a design image or add a link? This helps us understand your vision.</p>
@@ -836,6 +989,85 @@ const DesignInspirationStep = ({ config, update, onFetchLink }: { config: any; u
           <button type="button" onClick={handleFetch} disabled={linkFetching || !(config.pinterestLink || '').trim()} className="py-4 px-5 border border-current/20 text-[9px] uppercase tracking-widest disabled:opacity-40">{linkFetching ? 'Fetching…' : 'Fetch'}</button>
         </div>
         {linkError && <p className="text-[9px] text-red-400/80 mt-2">{linkError}</p>}
+      </div>
+      <div className="border-t border-white/10 pt-6 space-y-3">
+        <p className="text-[10px] uppercase tracking-widest opacity-60">AI design assistant</p>
+        <p className="text-[9px] opacity-60">
+          Chat about this image like you would with a designer – e.g. &quot;this ring but in rose gold with a thinner band&quot;.
+        </p>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="hidden md:block w-32 shrink-0">
+            {displayUrl && (
+              <div className="bg-white/5 border border-white/10 rounded-md p-2 flex items-center justify-center">
+                <img src={displayUrl} alt="Inspiration preview" className="max-h-28 object-contain" />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 flex flex-col gap-3">
+            <div className="bg-black/40 border border-white/10 rounded-lg p-3 min-h-[140px] max-h-72 overflow-y-auto space-y-3">
+              {!aiQuestion && !aiAnswer && (
+                <div className="text-[10px] opacity-45">
+                  Try asking: <span className="italic">&quot;Keep this centre stone but add a delicate pave band in platinum.&quot;</span>
+                </div>
+              )}
+              {aiQuestion && (
+                <div className="flex justify-end">
+                  <div className="max-w-[80%] bg-emerald-500/10 border border-emerald-400/40 rounded-2xl rounded-br-sm px-3 py-2 text-[10px]">
+                    {aiQuestion}
+                  </div>
+                </div>
+              )}
+              {aiAnswer && (
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] bg-white/5 border border-white/15 rounded-2xl rounded-bl-sm px-3 py-2 text-[10px] whitespace-pre-wrap leading-relaxed">
+                    {aiAnswer}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="sr-only">Describe your change</label>
+                  <input
+                    type="text"
+                    value={aiQuestion}
+                    onChange={e => setAiQuestion(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!aiLoading) handleImageChat();
+                      }
+                    }}
+                    placeholder="Describe how you’d like to change this design…"
+                    className="w-full bg-white/5 border border-white/10 rounded-full px-4 py-2 text-[11px] font-light focus:outline-none focus:border-current/40"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleImageChat}
+                  disabled={aiLoading}
+                  className="h-9 px-4 rounded-full bg-white text-black text-[9px] uppercase tracking-widest font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {aiLoading ? 'Thinking…' : 'Send'}
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[9px] text-red-400/80 min-h-[1em]">
+                  {aiError}
+                </div>
+                <button
+                  type="button"
+                  onClick={applyAiSpecToConfig}
+                  disabled={!aiSpec}
+                  className="px-3 py-1 rounded-full border border-emerald-400/60 text-emerald-300 text-[8px] uppercase tracking-widest hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Apply to design
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
