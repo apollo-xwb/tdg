@@ -2,8 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Lighter secondary/paragraph text for readability (tester feedback) */
+/* Slightly larger base for legibility; smallest UI text at least 12px */
+@layer base {
+  html { font-size: 16px; }
+  body { font-size: 1rem; line-height: 1.6; }
+}
+
+/* Bump smallest text sizes app-wide for legibility; lighter secondary text */
 @layer utilities {
+  .text-\[10px\] { font-size: 12px; }
+  .text-\[11px\] { font-size: 13px; }
   .text-secondary { opacity: 0.78; }
   .text-muted { opacity: 0.68; }
 }

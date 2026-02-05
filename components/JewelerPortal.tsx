@@ -7,10 +7,13 @@ import { getJewelerEmail, supabase, signOut, updatePassword, fetchCatalogProduct
 import { calculateQuotePrice } from '../lib/quotePrice';
 import { notifyClientIfRequested } from '../lib/notifyClient';
 import JewelerLogin from './JewelerLogin';
-import { Search, Edit3, Trash2, Phone, FileText, Plus, Save, X, Shield, Share2, Video, CreditCard, LayoutGrid, List, Package, BarChart3, Mail, Copy, Settings, Sparkles, Calendar, Clock, BookOpen, FolderOpen, Upload, LogOut, Lock } from 'lucide-react';
+import { Search, Edit3, Trash2, Phone, FileText, Plus, Save, X, Shield, Share2, Video, CreditCard, LayoutGrid, List, Package, BarChart3, Mail, Copy, Settings, Sparkles, Calendar, Clock, BookOpen, FolderOpen, Upload, LogOut, Lock, Box } from 'lucide-react';
+import JewelerCAD from './JewelerCAD';
 import { METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, JEWELLERY_TYPES, OPENING_HOURS, DONTPAYRETAIL } from '../constants';
 import { EMAIL_FLOW_TRIGGER_LABELS, DEFAULT_EMAIL_TEMPLATES, VARIABLE_HINT, createFlowFromTemplate } from '../lib/emailFlowTemplates';
 import { DAY_NAMES } from '../lib/calendarSlots';
+import CustomSelect from './CustomSelect';
+import ProductModelViewer from './ProductModelViewer';
 
 const LEAD_STATUSES: LeadStatus[] = ['New', 'Contacted', 'Quoted', 'Won', 'Lost', 'Closed'];
 
@@ -84,9 +87,15 @@ const EmailFlowsTab: React.FC<{
               <label className="text-[8px] uppercase opacity-68 font-bold block">Name</label>
               <input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none" placeholder="e.g. Quote approved" />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Trigger</label>
-              <select value={form.triggerType || 'custom'} onChange={e => setForm({ ...form, triggerType: e.target.value as EmailFlowTriggerType })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                {(Object.entries(triggerLabels) as [EmailFlowTriggerType, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
+              <CustomSelect
+                options={(Object.entries(triggerLabels) as [EmailFlowTriggerType, string][]).map(([k, v]) => ({
+                  value: k,
+                  label: v,
+                }))}
+                value={form.triggerType || 'custom'}
+                onChange={v => setForm({ ...form, triggerType: v as EmailFlowTriggerType })}
+                theme="dark"
+              />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Subject</label>
               <input value={form.subjectTemplate || ''} onChange={e => setForm({ ...form, subjectTemplate: e.target.value })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none" placeholder="Subject line" />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Follow-up (days)</label>
@@ -153,11 +162,97 @@ const LogoUploadButton: React.FC<{ jewelerId: string; onUpload: (url: string) =>
   </label>
 );
 
+type CadFile = { id: string; name: string; url: string; createdAt: string };
+
+const CadLibraryPanel: React.FC<{ jewelerId: string; theme: 'dark' | 'light' }> = ({ jewelerId, theme }) => {
+  const [files, setFiles] = useState<CadFile[]>(() => {
+    try {
+      const raw = localStorage.getItem('cad_library');
+      return raw ? JSON.parse(raw) as CadFile[] : [];
+    } catch {
+      return [];
+    }
+  });
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (file: File) => {
+    if (!jewelerId) return;
+    setUploading(true);
+    try {
+      const url = await uploadJewelerAsset(jewelerId, 'models', file);
+      if (!url) return;
+      const id = `cad-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const name = file.name.replace(/\.[^.]+$/, '');
+      const createdAt = new Date().toISOString();
+      const next = [{ id, name, url, createdAt }, ...files];
+      setFiles(next);
+      localStorage.setItem('cad_library', JSON.stringify(next));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const isDark = theme === 'dark';
+
+  return (
+    <aside className="space-y-4">
+      <div className="glass border border-white/10 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[11px] uppercase tracking-widest font-bold">CAD Library</h3>
+            <p className="text-[9px] opacity-68 mt-1">Upload ready-to-cast 3D designs to reuse across quotes.</p>
+          </div>
+          <span className="text-[9px] opacity-60 uppercase tracking-[0.2em]">{files.length} saved</span>
+        </div>
+        <label className={`w-full aspect-square rounded-3xl border-dashed border-2 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${isDark ? 'border-white/20 hover:border-emerald-400/60 hover:bg-white/5' : 'border-slate-300 hover:border-emerald-500/70 hover:bg-emerald-50/40'}`}>
+          <Upload size={26} className={isDark ? 'text-emerald-300' : 'text-emerald-600'} />
+          <span className="text-[10px] uppercase tracking-[0.25em]">Upload 3D design</span>
+          <span className="text-[9px] opacity-60 mt-1 text-center px-4">GLB (recommended) or OBJ. Stored in Supabase + this browser.</span>
+          <input
+            type="file"
+            accept=".glb,.gltf,.obj"
+            className="hidden"
+            onChange={async e => {
+              const f = e.target.files?.[0];
+              if (f) await handleUpload(f);
+              e.target.value = '';
+            }}
+            disabled={uploading}
+          />
+        </label>
+        {uploading && <p className="text-[9px] opacity-70">Uploading… keep this tab open.</p>}
+        <p className="text-[8px] opacity-55">
+          Tip: keep working copies of your GLB files in <code className="font-mono">src/3d</code> for version control, then upload from here to sync them to the cloud.
+        </p>
+      </div>
+      {files.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[9px] uppercase tracking-widest opacity-70">Saved designs</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {files.map(f => (
+              <div key={f.id} className="glass border border-white/10 rounded-xl overflow-hidden">
+                <div className="aspect-video bg-black/40">
+                  <ProductModelViewer src={f.url} alt={f.name} className="w-full h-full" showConfigurator />
+                </div>
+                <div className="px-3 py-2 space-y-1">
+                  <p className="text-[10px] uppercase tracking-widest truncate">{f.name}</p>
+                  <p className="text-[9px] opacity-55 truncate">{f.url}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+};
+
 const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, catalogProducts = [], onCatalogUpdate, emailFlows = [], onEmailFlowsUpdate, jewelerSettings = null, onJewelerSettingsRefresh, sessionUser = null }) => {
   const jewelerEmail = getJewelerEmail();
   const isJeweler = jewelerEmail && sessionUser?.email?.toLowerCase() === jewelerEmail.toLowerCase();
   const showLogin = !!jewelerEmail && !isJeweler;
-  const [tab, setTab] = useState<'Board' | 'Orders' | 'Leads' | 'Catalog' | 'NewQuote' | 'Analytics' | 'Email' | 'Calendar' | 'Settings' | 'Guides' | 'Blog'>('Board');
+  const [tab, setTab] = useState<'Board' | 'Orders' | 'Leads' | 'Catalog' | 'NewQuote' | 'CAD' | 'Analytics' | 'Email' | 'Calendar' | 'Settings' | 'Guides' | 'Blog'>('Board');
+  const [navOpen, setNavOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
@@ -693,6 +788,7 @@ For questions, please contact our concierge.`;
     { id: 'Leads', label: 'Leads', icon: <FileText size={28} strokeWidth={1.5} />, count: userState.leads.length },
     { id: 'Catalog', label: 'Catalog', icon: <Package size={28} strokeWidth={1.5} />, count: catalogProducts.length },
     { id: 'NewQuote', label: 'Manual Quote', icon: <Plus size={28} strokeWidth={1.5} /> },
+    { id: 'CAD', label: 'Ring CAD', icon: <Box size={28} strokeWidth={1.5} /> },
     { id: 'Analytics', label: 'Analytics', icon: <BarChart3 size={28} strokeWidth={1.5} /> },
     { id: 'Email', label: 'Email', icon: <Mail size={28} strokeWidth={1.5} />, count: emailFlows.length },
     { id: 'Calendar', label: 'Calendar', icon: <Calendar size={28} strokeWidth={1.5} />, count: appointments.filter(a => a.status === 'scheduled').length },
@@ -707,56 +803,92 @@ For questions, please contact our concierge.`;
     else if (id === 'Guides') { setTab('Guides'); setEditingGuideId(null); setAddingGuide(false); setGuideForm({ title: '', description: '', downloadUrl: '', suggestedFilename: '', tags: [], sortOrder: vaultGuides.length, isActive: true }); }
     else if (id === 'Blog') { setTab('Blog'); setEditingBlogId(null); setAddingBlog(false); setBlogForm({ title: '', slug: '', metaDescription: '', category: 'Guide', excerpt: '', readTimeMinutes: 5, body: [] }); }
     else setTab(id);
+    setNavOpen(false);
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12 space-y-16 animate-fadeIn">
+    <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12 space-y-16 animate-fadeIn relative">
+      {/* Slide-out Operations nav panel */}
+      {navOpen && (
+        <div className={`fixed inset-y-4 left-4 z-40 w-72 rounded-2xl border ${isDarkTheme ? 'bg-black/95 border-white/10 text-white' : 'bg-white shadow-xl border-slate-200 text-slate-900'} flex flex-col`}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <div>
+              <p className="text-[9px] uppercase tracking-[0.3em] opacity-60">Operations</p>
+              <p className="text-[11px] font-semibold tracking-wide">Hub navigation</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNavOpen(false)}
+              className="p-2 rounded-full hover:bg-white/5 transition-colors"
+              aria-label="Close navigation"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <nav aria-label="Operations" className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+            {TAB_ITEMS.map(({ id, label, icon, count }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleTabClick(id)}
+                className={[
+                  'w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl text-[10px] uppercase tracking-[0.2em] font-medium transition-all',
+                  isDarkTheme
+                    ? 'bg-white/5 hover:bg-white/10 border border-white/10'
+                    : 'bg-slate-50 hover:bg-slate-100 border border-slate-200',
+                  tab === id
+                    ? (isDarkTheme ? 'ring-2 ring-emerald-400/60' : 'ring-2 ring-emerald-500/70')
+                    : ''
+                ].join(' ')}
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    className={
+                      tab === id
+                        ? (isDarkTheme ? 'text-emerald-300' : 'text-emerald-600')
+                        : (isDarkTheme ? 'text-white/80' : 'text-slate-700')
+                    }
+                  >
+                    {icon}
+                  </span>
+                  <span className={tab === id ? '' : isDarkTheme ? 'opacity-80' : 'opacity-90'}>{label}</span>
+                </span>
+                {count != null && count > 0 && (
+                  <span className="text-[9px] opacity-60">({count})</span>
+                )}
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
+
       <header className="flex flex-col gap-8 border-b border-current/10 pb-12">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
           <div className="space-y-4">
             <p className="text-[10px] uppercase tracking-[0.6em] text-emerald-500 font-bold">Jeweller Command Centre</p>
             <h1 className="text-5xl font-thin tracking-tighter uppercase">Operations Hub</h1>
           </div>
-          <button type="button" onClick={() => signOut()} className="flex items-center gap-2 px-4 py-2 border border-white/20 text-[9px] uppercase tracking-widest opacity-70 hover:opacity-100 hover:bg-white/5 transition-all" title="Sign out">
-            <LogOut size={14} /> Sign out
-          </button>
-        </div>
-        {/* Hamburger-style nav grid */}
-        <nav aria-label="Operations" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-          {TAB_ITEMS.map(({ id, label, icon, count }) => (
+          <div className="flex flex-wrap items-center gap-3">
             <button
-              key={id}
               type="button"
-              onClick={() => handleTabClick(id)}
-              className={[
-                'flex flex-col items-center justify-center gap-2.5 py-6 px-4 rounded-2xl transition-all min-h-[100px] text-[10px] uppercase tracking-[0.2em] font-medium',
-                isDarkTheme
-                  ? 'bg-white/10 hover:bg-white/20 border border-white/12 text-white'
-                  : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-900 shadow-sm',
-                tab === id
-                  ? (isDarkTheme ? 'ring-2 ring-white/40' : 'ring-2 ring-emerald-400/70')
-                  : ''
-              ].join(' ')}
+              onClick={() => setNavOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 text-[9px] uppercase tracking-widest opacity-80 hover:opacity-100 hover:bg-white/5 transition-all"
             >
-              <span
-                className={
-                  tab === id
-                    ? (isDarkTheme ? 'text-emerald-300' : 'text-emerald-500')
-                    : (isDarkTheme ? 'text-white/80' : 'text-slate-700')
-                }
-              >
-                {icon}
-              </span>
-              <span className={tab === id ? '' : isDarkTheme ? 'opacity-80' : 'opacity-90'}>{label}</span>
-              {count != null && count > 0 && (
-                <span className="text-[9px] opacity-60">({count})</span>
-              )}
+              <LayoutGrid size={14} /> Hub menu
             </button>
-          ))}
-        </nav>
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="flex items-center gap-2 px-4 py-2 border border-white/20 text-[9px] uppercase tracking-widest opacity-70 hover:opacity-100 hover:bg-white/5 transition-all"
+              title="Sign out"
+            >
+              <LogOut size={14} /> Sign out
+            </button>
+          </div>
+        </div>
       </header>
 
-      {tab !== 'NewQuote' && tab !== 'Catalog' && tab !== 'Analytics' && tab !== 'Email' && tab !== 'Settings' && tab !== 'Calendar' && tab !== 'Guides' && tab !== 'Blog' && (
+      {tab !== 'NewQuote' && tab !== 'Catalog' && tab !== 'CAD' && tab !== 'Analytics' && tab !== 'Email' && tab !== 'Settings' && tab !== 'Calendar' && tab !== 'Guides' && tab !== 'Blog' && (
         <div className="flex gap-4">
           <Search className="opacity-50 mt-3" size={18} />
           <input type="text" placeholder="Search by Ref, Client Name, or Email..." className="bg-transparent border-b border-current/20 w-full py-4 text-sm focus:outline-none placeholder:opacity-60" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
@@ -899,21 +1031,30 @@ For questions, please contact our concierge.`;
                         <p className="text-[9px] uppercase opacity-68 font-bold">Quotation Specs</p>
                         <div className="space-y-2">
                            <label className="text-[8px] uppercase opacity-68 font-bold block">Metal</label>
-                           <select value={design.metal || ''} onChange={e => handleUpdate(design.id, {metal: e.target.value as any})} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                              {Object.keys(METAL_DATA).map(m => <option key={m} value={m}>{m}</option>)}
-                           </select>
+                           <CustomSelect
+                             options={Object.keys(METAL_DATA).map(m => ({ value: m, label: m }))}
+                             value={design.metal || ''}
+                             onChange={v => handleUpdate(design.id, { metal: v as any })}
+                             theme={isDarkTheme ? 'dark' : 'light'}
+                           />
                         </div>
                         <div className="space-y-2">
                            <label className="text-[8px] uppercase opacity-68 font-bold block">Shape</label>
-                           <select value={design.shape || ''} onChange={e => handleUpdate(design.id, {shape: e.target.value as any})} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                              {Object.keys(SHAPE_DATA).map(s => <option key={s} value={s}>{s}</option>)}
-                           </select>
+                           <CustomSelect
+                             options={Object.keys(SHAPE_DATA).map(s => ({ value: s, label: s }))}
+                             value={design.shape || ''}
+                             onChange={v => handleUpdate(design.id, { shape: v as any })}
+                             theme={isDarkTheme ? 'dark' : 'light'}
+                           />
                         </div>
                         <div className="space-y-2">
                            <label className="text-[8px] uppercase opacity-68 font-bold block">Quality Tier</label>
-                           <select value={design.qualityTier || ''} onChange={e => handleUpdate(design.id, {qualityTier: e.target.value as any})} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                              {Object.keys(QUALITY_TIERS).map(q => <option key={q} value={q}>{q}</option>)}
-                           </select>
+                           <CustomSelect
+                             options={Object.keys(QUALITY_TIERS).map(q => ({ value: q, label: q }))}
+                             value={design.qualityTier || ''}
+                             onChange={v => handleUpdate(design.id, { qualityTier: v as any })}
+                             theme={isDarkTheme ? 'dark' : 'light'}
+                           />
                         </div>
                         <div className="space-y-2">
                            <label className="text-[8px] uppercase opacity-68 font-bold block">Carat</label>
@@ -943,11 +1084,19 @@ For questions, please contact our concierge.`;
                            <input type="number" min={0} max={200} value={design.marginPercent ?? ''} onChange={e => handleUpdate(design.id, { marginPercent: e.target.value === '' ? undefined : parseInt(e.target.value, 10) ?? 0 })} placeholder="Override" className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none placeholder:opacity-50" />
                         </div>
                      </div>
-                     <div className="space-y-4">
+                        <div className="space-y-4">
                         <p className="text-[9px] uppercase opacity-68 font-bold">Status & Links</p>
-                        <select value={design.status} onChange={e => { const s = e.target.value as OrderStatus; const now = new Date().toISOString(); handleUpdate(design.id, { status: s, statusUpdatedAt: now, milestoneDates: { ...(design.milestoneDates ?? {}), [s]: now } }); if (design.notifyClientOnStatusChange) notifyClientIfRequested(design, s); }} className="w-full bg-black/50 border border-white/10 p-3 text-[10px] uppercase tracking-widest">
-                           {STATUS_FLOW.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                        <CustomSelect
+                          options={STATUS_FLOW.map(s => ({ value: s, label: s }))}
+                          value={design.status}
+                          onChange={v => {
+                            const s = v as OrderStatus;
+                            const now = new Date().toISOString();
+                            handleUpdate(design.id, { status: s, statusUpdatedAt: now, milestoneDates: { ...(design.milestoneDates ?? {}), [s]: now } });
+                            if (design.notifyClientOnStatusChange) notifyClientIfRequested(design, s);
+                          }}
+                          theme={isDarkTheme ? 'dark' : 'light'}
+                        />
                         <div className="mt-4 space-y-2">
                           <p className="text-[8px] uppercase opacity-68 font-bold">Milestone dates (optional)</p>
                           {(['Deposit Paid', 'Sourcing Stone', 'In Production', 'Ready', 'Collected'] as const).map(s => (
@@ -1065,16 +1214,32 @@ For questions, please contact our concierge.`;
                <div className="flex gap-10 text-[9px] opacity-68 uppercase tracking-widest font-medium">
                   <span className="flex items-center gap-2"><Phone size={12}/> {lead.phone}</span>
                   <span className="flex items-center gap-2"><FileText size={12}/> {lead.email}</span>
-               </div>
-               <select value={lead.status} onChange={e => handleLeadStatusChange(lead, e.target.value as LeadStatus)} className="mt-2 bg-black/50 border border-white/10 px-3 py-1.5 text-[9px] uppercase tracking-widest focus:outline-none">
-                 {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-               </select>
+           </div>
+           <div className="mt-2 max-w-xs">
+             <CustomSelect
+               options={LEAD_STATUSES.map(s => ({ value: s, label: s }))}
+               value={lead.status}
+               onChange={v => handleLeadStatusChange(lead, v as LeadStatus)}
+               theme={isDarkTheme ? 'dark' : 'light'}
+               compact
+             />
+           </div>
             </div>
             <button onClick={() => handleInitiatePipeline(lead)} disabled={!!lead.linkedDesignId} className="px-8 py-3 bg-white text-black text-[9px] uppercase tracking-widest font-bold hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
               {lead.linkedDesignId ? 'Pipeline started' : 'Initiate Pipeline'}
             </button>
           </div>
         ))}
+
+        {tab === 'CAD' && (
+          <div className="grid lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)] gap-8 items-start">
+            <JewelerCAD
+              jewelerName={sessionUser?.user_metadata?.full_name ?? sessionUser?.email?.split('@')[0] ?? 'Jeweler'}
+              theme={userState.theme}
+            />
+            <CadLibraryPanel jewelerId={jewelerEmail || sessionUser?.email || ''} theme={userState.theme} />
+          </div>
+        )}
 
         {tab === 'NewQuote' && (
           <div className="space-y-8 animate-fadeIn max-w-6xl">
@@ -1086,44 +1251,69 @@ For questions, please contact our concierge.`;
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Margin % (uses Settings default when saved)</label>
                 <input type="number" min={0} max={200} value={effectiveMarginPercent} onChange={e => { const v = parseInt(e.target.value) || 0; setDefaultMarginPercent(v); localStorage.setItem('jeweler_margin_pct', String(v)); }} className="w-24 bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none" />
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Type</label>
-                <select value={newQuote.type || 'Engagement Ring'} onChange={e => setNewQuote(q => ({ ...q, type: e.target.value as any }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                  {JEWELLERY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <CustomSelect
+                  options={JEWELLERY_TYPES.map(t => ({ value: t, label: t }))}
+                  value={newQuote.type || 'Engagement Ring'}
+                  onChange={v => setNewQuote(q => ({ ...q, type: v as any }))}
+                  theme={userState.theme}
+                />
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Metal</label>
-                <select value={newQuote.metal || 'Platinum'} onChange={e => setNewQuote(q => ({ ...q, metal: e.target.value as any }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                  {Object.keys(METAL_DATA).map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <CustomSelect
+                  options={Object.keys(METAL_DATA).map(m => ({ value: m, label: m }))}
+                  value={newQuote.metal || 'Platinum'}
+                  onChange={v => setNewQuote(q => ({ ...q, metal: v as any }))}
+                  theme={userState.theme}
+                />
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Shape</label>
-                <select value={newQuote.shape || 'Round'} onChange={e => setNewQuote(q => ({ ...q, shape: e.target.value as any }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                  {Object.keys(SHAPE_DATA).map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <CustomSelect
+                  options={Object.keys(SHAPE_DATA).map(s => ({ value: s, label: s }))}
+                  value={newQuote.shape || 'Round'}
+                  onChange={v => setNewQuote(q => ({ ...q, shape: v as any }))}
+                  theme={userState.theme}
+                />
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Stone</label>
-                <select value={newQuote.stoneCategory || 'Diamond'} onChange={e => setNewQuote(q => ({ ...q, stoneCategory: e.target.value as any }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                  <option value="Diamond">Diamond</option>
-                  <option value="Moissanite">Moissanite</option>
-                  <option value="None">None</option>
-                  <option value="Sapphire">Sapphire</option>
-                  <option value="Other">Other</option>
-                </select>
+                <CustomSelect
+                  options={[
+                    { value: 'Diamond', label: 'Diamond' },
+                    { value: 'Moissanite', label: 'Moissanite' },
+                    { value: 'None', label: 'None' },
+                    { value: 'Sapphire', label: 'Sapphire' },
+                    { value: 'Other', label: 'Other' },
+                  ]}
+                  value={newQuote.stoneCategory || 'Diamond'}
+                  onChange={v => setNewQuote(q => ({ ...q, stoneCategory: v as any }))}
+                  theme={userState.theme}
+                />
                 {(newQuote.stoneCategory === 'Diamond' || newQuote.stoneCategory === 'Moissanite') && (
                   <>
                     <label className="text-[8px] uppercase opacity-68 font-bold block">Stone type</label>
-                    <select value={newQuote.stoneType || 'Natural'} onChange={e => setNewQuote(q => ({ ...q, stoneType: e.target.value as any }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                      <option value="Natural">Natural</option>
-                      <option value="Lab">Lab</option>
-                    </select>
+                    <CustomSelect
+                      options={[
+                        { value: 'Natural', label: 'Natural' },
+                        { value: 'Lab', label: 'Lab' },
+                      ]}
+                      value={newQuote.stoneType || 'Natural'}
+                      onChange={v => setNewQuote(q => ({ ...q, stoneType: v as any }))}
+                      theme={userState.theme}
+                    />
                   </>
                 )}
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Quality tier</label>
-                <select value={newQuote.qualityTier || 'Balance Size & Quality'} onChange={e => setNewQuote(q => ({ ...q, qualityTier: e.target.value as any }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                  {Object.keys(QUALITY_TIERS).map(q => <option key={q} value={q}>{q}</option>)}
-                </select>
+                <CustomSelect
+                  options={Object.keys(QUALITY_TIERS).map(q => ({ value: q, label: q }))}
+                  value={newQuote.qualityTier || 'Balance Size & Quality'}
+                  onChange={v => setNewQuote(q => ({ ...q, qualityTier: v as any }))}
+                  theme={userState.theme}
+                />
                 {newQuote.type !== 'Loose Stone' && (
                   <>
                     <label className="text-[8px] uppercase opacity-68 font-bold block">Setting</label>
-                    <select value={newQuote.settingStyle || 'Solitaire'} onChange={e => setNewQuote(q => ({ ...q, settingStyle: e.target.value as any }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                      {Object.keys(SETTING_DATA).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    <CustomSelect
+                      options={Object.keys(SETTING_DATA).map(s => ({ value: s, label: s }))}
+                      value={newQuote.settingStyle || 'Solitaire'}
+                      onChange={v => setNewQuote(q => ({ ...q, settingStyle: v as any }))}
+                      theme={userState.theme}
+                    />
                   </>
                 )}
                 <label className="text-[8px] uppercase opacity-68 font-bold block">Carat</label>
@@ -1492,20 +1682,22 @@ For questions, please contact our concierge.`;
                           <p className="text-[9px] text-emerald-400/90 mt-2 flex items-center gap-1"><Clock size={10} /> {dateStr} · {timeStr}</p>
                           <p className="text-[9px] opacity-80 mt-2 border-l-2 border-white/20 pl-2 italic">&ldquo;{a.summary || '—'}&rdquo;</p>
                         </div>
-                        <select
+                        <CustomSelect
+                          options={[
+                            { value: 'scheduled', label: 'Scheduled' },
+                            { value: 'completed', label: 'Completed' },
+                            { value: 'cancelled', label: 'Cancelled' },
+                            { value: 'no_show', label: 'No show' },
+                          ]}
                           value={a.status}
-                          onChange={async (e) => {
-                            await updateAppointment(a.id, { status: e.target.value as Appointment['status'] });
+                          onChange={async (v) => {
+                            await updateAppointment(a.id, { status: v as Appointment['status'] });
                             const next = await fetchAppointments(jewelerEmail);
                             setAppointments(next);
                           }}
-                          className="bg-black/50 border border-white/10 p-1.5 text-[9px] uppercase tracking-widest"
-                        >
-                          <option value="scheduled">Scheduled</option>
-                          <option value="completed">Completed</option>
-                          <option value="cancelled">Cancelled</option>
-                          <option value="no_show">No show</option>
-                        </select>
+                          theme={isDarkTheme ? 'dark' : 'light'}
+                          compact
+                        />
                       </div>
                     </div>
                   );
@@ -1519,15 +1711,12 @@ For questions, please contact our concierge.`;
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Day</label>
-                    <select
-                      value={availabilityForm.dayOfWeek ?? 1}
-                      onChange={(e) => setAvailabilityForm({ ...availabilityForm, dayOfWeek: parseInt(e.target.value, 10) })}
-                      className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest"
-                    >
-                      {DAY_NAMES.map((name, i) => (
-                        <option key={i} value={i}>{name}</option>
-                      ))}
-                    </select>
+                    <CustomSelect
+                      options={DAY_NAMES.map((name, i) => ({ value: String(i), label: name }))}
+                      value={String(availabilityForm.dayOfWeek ?? 1)}
+                      onChange={(v) => setAvailabilityForm({ ...availabilityForm, dayOfWeek: parseInt(v, 10) })}
+                      theme={userState.theme}
+                    />
                   </div>
                   <div>
                     <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">From</label>
@@ -1718,9 +1907,12 @@ For questions, please contact our concierge.`;
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Category</label>
-                        <select value={blogForm.category ?? 'Guide'} onChange={e => setBlogForm(f => ({ ...f, category: e.target.value }))} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                          {['Buying', 'Diamonds', 'Metals', 'Care', 'Engagement', 'Guide', 'Stones'].map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <CustomSelect
+                          options={['Buying', 'Diamonds', 'Metals', 'Care', 'Engagement', 'Guide', 'Stones'].map(c => ({ value: c, label: c }))}
+                          value={blogForm.category ?? 'Guide'}
+                          onChange={v => setBlogForm(f => ({ ...f, category: v }))}
+                          theme={userState.theme}
+                        />
                       </div>
                       <div>
                         <label className="text-[8px] uppercase opacity-68 font-bold block mb-1">Read time (min)</label>
@@ -2292,30 +2484,40 @@ const CatalogTab: React.FC<{
               <label className="text-[8px] uppercase opacity-68 font-bold block">Price (ZAR)</label>
               <input type="number" value={form.priceZAR ?? ''} onChange={e => setForm({ ...form, priceZAR: parseInt(e.target.value) || 0 })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none focus:border-white/30" />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Type</label>
-              <select value={form.type || ''} onChange={e => setForm({ ...form, type: e.target.value as any })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                <option value="">—</option>
-                {JEWELLERY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <CustomSelect
+                options={[{ value: '', label: '—' }, ...JEWELLERY_TYPES.map(t => ({ value: t, label: t }))]}
+                value={form.type || ''}
+                onChange={v => setForm({ ...form, type: v as any })}
+                theme={userState.theme}
+              />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Metal</label>
-              <select value={form.metal || ''} onChange={e => setForm({ ...form, metal: e.target.value as any })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                <option value="">—</option>
-                {Object.keys(METAL_DATA).map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              <CustomSelect
+                options={[{ value: '', label: '—' }, ...Object.keys(METAL_DATA).map(m => ({ value: m, label: m }))]}
+                value={form.metal || ''}
+                onChange={v => setForm({ ...form, metal: v as any })}
+                theme={userState.theme}
+              />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Shape</label>
-              <select value={form.shape || ''} onChange={e => setForm({ ...form, shape: e.target.value as any })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                <option value="">—</option>
-                {Object.keys(SHAPE_DATA).map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <CustomSelect
+                options={[{ value: '', label: '—' }, ...Object.keys(SHAPE_DATA).map(s => ({ value: s, label: s }))]}
+                value={form.shape || ''}
+                onChange={v => setForm({ ...form, shape: v as any })}
+                theme={userState.theme}
+              />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Stone</label>
-              <select value={form.stoneCategory || ''} onChange={e => setForm({ ...form, stoneCategory: e.target.value as any })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                <option value="">—</option>
-                {STONE_CATEGORIES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <CustomSelect
+                options={[{ value: '', label: '—' }, ...STONE_CATEGORIES.map(s => ({ value: s, label: s }))]}
+                value={form.stoneCategory || ''}
+                onChange={v => setForm({ ...form, stoneCategory: v as any })}
+                theme={userState.theme}
+              />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Setting</label>
-              <select value={form.settingStyle || ''} onChange={e => setForm({ ...form, settingStyle: e.target.value as any })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] uppercase tracking-widest">
-                <option value="">—</option>
-                {Object.keys(SETTING_DATA).map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <CustomSelect
+                options={[{ value: '', label: '—' }, ...Object.keys(SETTING_DATA).map(s => ({ value: s, label: s }))]}
+                value={form.settingStyle || ''}
+                onChange={v => setForm({ ...form, settingStyle: v as any })}
+                theme={userState.theme}
+              />
               <label className="text-[8px] uppercase opacity-68 font-bold block">Carat</label>
               <input type="number" step="0.01" value={form.carat ?? ''} onChange={e => setForm({ ...form, carat: parseFloat(e.target.value) || undefined })} className="w-full bg-black/50 border border-white/10 p-2 text-[10px] focus:outline-none focus:border-white/30" />
             </div>

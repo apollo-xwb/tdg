@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppView, CatalogProduct, CatalogProductVariant, Lead } from '../types';
-import { EXCHANGE_RATES, getMetalSwatchGradient, groupMetalsByType, parseMetalLabel, SHAPE_DATA } from '../constants';
+import { EXCHANGE_RATES, getMetalSwatchGradient, groupMetalsByType, parseMetalLabel, SETTING_DATA, SHAPE_DATA } from '../constants';
 import { MessageSquare, X, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 import ProductModelViewer from './ProductModelViewer';
 import CustomSelect from './CustomSelect';
@@ -47,6 +47,11 @@ function getProductMetalTypes(p: CatalogProduct): string[] {
   return [...new Set(groupMetalsByType(metals).map(g => g.metalType))];
 }
 
+/** Get setting style from product (product-level only; variants don't have setting in type) */
+function getProductSetting(p: CatalogProduct): string | null {
+  return p.settingStyle ?? null;
+}
+
 const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setView, currency = 'ZAR', theme = 'dark' }) => {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState<SortKey>('newest');
@@ -54,6 +59,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
   const [filterMetal, setFilterMetal] = useState<string | null>(null);
   const [filterPriceMin, setFilterPriceMin] = useState<number | null>(null);
   const [filterPriceMax, setFilterPriceMax] = useState<number | null>(null);
+  const [filterSetting, setFilterSetting] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedVariantByProduct, setSelectedVariantByProduct] = useState<Record<string, number>>({});
   const [enquiryProduct, setEnquiryProduct] = useState<CatalogProduct | null>(null);
@@ -78,6 +84,15 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
     return [...set].sort();
   }, [active]);
 
+  const allSettings = useMemo(() => {
+    const set = new Set<string>();
+    active.forEach(p => {
+      const s = getProductSetting(p);
+      if (s) set.add(s);
+    });
+    return [...set].sort((a, b) => (SETTING_DATA[a] ? 0 : 1) - (SETTING_DATA[b] ? 0 : 1));
+  }, [active]);
+
   const filtered = useMemo(() => {
     return active.filter(p => {
       if (filterShape) {
@@ -88,12 +103,16 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
         const metals = getProductMetalTypes(p);
         if (!metals.some(m => m === filterMetal)) return false;
       }
+      if (filterSetting) {
+        const s = getProductSetting(p);
+        if (!s || s !== filterSetting) return false;
+      }
       const price = getSortPrice(p);
       if (filterPriceMin != null && price < filterPriceMin) return false;
       if (filterPriceMax != null && price > filterPriceMax) return false;
       return true;
     });
-  }, [active, filterShape, filterMetal, filterPriceMin, filterPriceMax]);
+  }, [active, filterShape, filterMetal, filterSetting, filterPriceMin, filterPriceMax]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -119,7 +138,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
     return list;
   }, [filtered, sortBy]);
 
-  const hasActiveFilters = filterShape || filterMetal || filterPriceMin != null || filterPriceMax != null;
+  const hasActiveFilters = filterShape || filterMetal || filterSetting || filterPriceMin != null || filterPriceMax != null;
 
   const handleEnquireSubmit = () => {
     if (!enquiryProduct) return;
@@ -194,7 +213,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                   hasActiveFilters ? 'border-emerald-500/50 bg-emerald-500/10' : theme === 'dark' ? 'border-white/20 hover:bg-white/5' : 'border-gray-300 hover:bg-gray-100'
                 }`}
               >
-                <SlidersHorizontal size={14} /> Filters {hasActiveFilters && `(${[filterShape, filterMetal, filterPriceMin, filterPriceMax].filter(Boolean).length})`}
+                <SlidersHorizontal size={14} /> Filters {hasActiveFilters && `(${[filterShape, filterMetal, filterSetting, filterPriceMin, filterPriceMax].filter(Boolean).length})`}
               </button>
               <div className="flex items-center gap-2">
                 <span className="text-[9px] uppercase opacity-68">Sort</span>
@@ -223,7 +242,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {allShapes.length > 0 && (
               <div>
-                <label className="block text-[9px] uppercase opacity-70 mb-2">Stone shape</label>
+                <label className="block text-[11px] uppercase opacity-70 mb-2">Stone shape</label>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => setFilterShape(null)}
@@ -259,11 +278,11 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
             )}
             {allMetalTypes.length > 0 && (
               <div>
-                <label className="block text-[9px] uppercase opacity-70 mb-2">Metal</label>
+                <label className="block text-[11px] uppercase opacity-70 mb-2">Metal</label>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => setFilterMetal(null)}
-                    className={`p-2 rounded-sm border text-[9px] uppercase tracking-wider transition-all ${
+                    className={`p-2 rounded-sm border text-[11px] uppercase tracking-wider transition-all ${
                       !filterMetal ? 'border-emerald-500/50 bg-emerald-500/10 font-bold' : theme === 'dark' ? 'border-white/20 hover:bg-white/5' : 'border-gray-300 hover:bg-gray-100'
                     }`}
                   >
@@ -287,8 +306,44 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                 </div>
               </div>
             )}
+            {allSettings.length > 0 && (
+              <div>
+                <label className="block text-[11px] uppercase opacity-70 mb-2">Setting</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setFilterSetting(null)}
+                    className={`p-2 rounded-sm border text-[11px] uppercase tracking-wider transition-all ${
+                      !filterSetting ? 'border-emerald-500/50 bg-emerald-500/10 font-bold' : theme === 'dark' ? 'border-white/20 hover:bg-white/5' : 'border-gray-300 hover:bg-gray-100'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {allSettings.map(setting => {
+                    const isSelected = filterSetting === setting;
+                    const settingData = SETTING_DATA[setting];
+                    return (
+                      <button
+                        key={setting}
+                        onClick={() => setFilterSetting(isSelected ? null : setting)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-sm border transition-all min-w-[56px] touch-manipulation ${
+                          isSelected ? 'border-emerald-500/50 bg-emerald-500/10 ring-2 ring-emerald-500/30' : theme === 'dark' ? 'border-white/20 hover:bg-white/5' : 'border-gray-300 hover:bg-gray-100'
+                        }`}
+                        title={setting}
+                      >
+                        {settingData?.img ? (
+                          <img src={settingData.img} alt={setting} className="w-8 h-8 object-contain" />
+                        ) : (
+                          <span className="w-8 h-8 flex items-center justify-center text-[10px] font-bold">{setting.slice(0, 2)}</span>
+                        )}
+                        <span className="text-[10px] truncate max-w-full">{setting}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div>
-              <label className="block text-[9px] uppercase opacity-70 mb-2">Price range (ZAR)</label>
+              <label className="block text-[11px] uppercase opacity-70 mb-2">Price range (ZAR)</label>
               <div className="flex gap-2 items-center">
                 <input
                   type="number"
@@ -299,7 +354,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                     theme === 'dark' ? 'bg-black/30 border-white/20' : 'bg-white border-gray-200'
                   }`}
                 />
-                <span className="text-[9px] opacity-60">–</span>
+                <span className="text-[11px] opacity-60">–</span>
                 <input
                   type="number"
                   placeholder="Max"
@@ -312,7 +367,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                 {(filterPriceMin != null || filterPriceMax != null) && (
                   <button
                     onClick={() => { setFilterPriceMin(null); setFilterPriceMax(null); }}
-                    className="text-[9px] uppercase opacity-70 hover:opacity-100"
+                    className="text-[11px] uppercase opacity-70 hover:opacity-100"
                   >
                     Clear
                   </button>
@@ -320,7 +375,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
               </div>
             </div>
           </div>
-          <p className="text-[9px] opacity-60">
+          <p className="text-[11px] opacity-60">
             Showing {sorted.length} of {active.length} designs
           </p>
         </div>
@@ -373,7 +428,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                 </div>
                 <div className="p-6 flex flex-col flex-grow" onClick={e => e.stopPropagation()}>
                   <h3 className="text-[11px] uppercase tracking-widest font-bold">{p.title}</h3>
-                  <p className="text-[9px] opacity-68 mt-1 line-clamp-2">{p.description || [p.type, variant?.metal || p.metal, variant?.shape || p.shape, p.stoneCategory].filter(Boolean).join(' • ')}</p>
+                  <p className="text-[11px] opacity-68 mt-1 line-clamp-2">{p.description || [p.type, variant?.metal || p.metal, variant?.shape || p.shape, p.stoneCategory].filter(Boolean).join(' • ')}</p>
                   {hasVariants && metalGroups.length > 0 && (
                     <div className="mt-3 space-y-2">
                       <div className="flex flex-wrap gap-1.5 sm:gap-2" role="group" aria-label="Metal type">
@@ -560,7 +615,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                 )}
               </div>
             )}
-            <p className="text-[9px] opacity-68">We’ll get in touch to discuss this design and next steps.</p>
+            <p className="text-[12px] opacity-68">We’ll get in touch to discuss this design and next steps.</p>
             <input type="text" placeholder="Name" value={enquiryName} onChange={e => setEnquiryName(e.target.value)} className="w-full bg-black/50 border border-white/10 p-3 text-[10px] focus:outline-none focus:border-white/30" />
             <input type="email" placeholder="Email" value={enquiryEmail} onChange={e => setEnquiryEmail(e.target.value)} className="w-full bg-black/50 border border-white/10 p-3 text-[10px] focus:outline-none focus:border-white/30" />
             <input type="tel" placeholder="Phone" value={enquiryPhone} onChange={e => setEnquiryPhone(e.target.value)} className="w-full bg-black/50 border border-white/10 p-3 text-[10px] focus:outline-none focus:border-white/30" />

@@ -245,7 +245,7 @@ const App: React.FC = () => {
           <Route path="/thank-you" element={<ThankYou setView={setCurrentView} currency={userState.currency} theme={userState.theme} />} />
           <Route path="*" element={
             <>
-              {currentView === 'Home' && <Home theme={userState.theme} onStart={() => setCurrentView('RingBuilder')} onLearn={() => setCurrentView('Learn')} />}
+              {currentView === 'Home' && <Home theme={userState.theme} onStart={() => setCurrentView('RingBuilder')} onLearn={() => setCurrentView('Learn')} onNavigate={handleNavTo} />}
               {currentView === 'RingBuilder' && <RingBuilder userState={userState} onSave={saveDesign} onUpdateDraft={updateDraft} sessionUser={sessionUser} hasAuth={!!supabase} logoUrl={logoQuotes} onNavigateToExplore={() => handleNavTo('Explore')} />}
               {currentView === 'Learn' && <Learn onNavigate={setCurrentView} theme={userState.theme} />}
               {currentView === 'Explore' && <Explore designs={userState.recentDesigns} addLead={addLead} setView={setCurrentView} currency={userState.currency} />}

@@ -50,8 +50,8 @@ export const OpeningHoursCountdown: React.FC<{ className?: string; hours?: Openi
     return () => clearInterval(t);
   }, [h]);
   return (
-    <div className={`flex items-center gap-2 text-[10px] uppercase tracking-widest opacity-70 ${className}`}>
-      <Clock size={12} />
+    <div className={`flex items-center gap-2 text-[12px] uppercase tracking-widest opacity-70 ${className}`}>
+      <Clock size={14} />
       <span>{v.label} {fmt(v.ms)}</span>
     </div>
   );
@@ -62,10 +62,10 @@ export const OpeningHoursBlock: React.FC<{ compact?: boolean; hours?: OpeningHou
   const h = hours ?? HOURS_DEFAULT;
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold opacity-80">
-        <Clock size={12} /> Hours
+      <div className="flex items-center gap-2 text-[12px] uppercase tracking-widest font-bold opacity-80">
+        <Clock size={14} /> Hours
       </div>
-      <ul className="text-[9px] uppercase tracking-widest opacity-60 space-y-0.5">
+      <ul className="text-[11px] uppercase tracking-widest opacity-60 space-y-0.5">
         {DAY_ORDER.map(d => {
           const o = h.find(x => x.day === d)!;
           return o?.open != null ? <li key={d}>{o.name} {o.open}:00–{o.close}:00</li> : <li key={d}>{o?.name ?? 'Day'} Closed</li>;
@@ -78,12 +78,12 @@ export const OpeningHoursBlock: React.FC<{ compact?: boolean; hours?: OpeningHou
 export const AddressBlock: React.FC<{ address?: string | null }> = ({ address }) => (
   <div className="flex items-start gap-2">
     <MapPin size={12} className="mt-0.5 opacity-60" />
-    <span className="text-[9px] uppercase tracking-widest opacity-60 leading-snug">{address ?? TDG_ADDRESS}</span>
+    <span className="text-[11px] uppercase tracking-widest opacity-60 leading-snug">{address ?? TDG_ADDRESS}</span>
   </div>
 );
 
 export const PhoneBlock: React.FC = () => (
-  <a href={`tel:${TDG_PHONE.replace(/\s/g, '')}`} className="flex items-center gap-2 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100">
-    <Phone size={12} /> {TDG_PHONE}
+  <a href={`tel:${TDG_PHONE.replace(/\s/g, '')}`} className="flex items-center gap-2 text-[11px] uppercase tracking-widest opacity-60 hover:opacity-100">
+    <Phone size={14} /> {TDG_PHONE}
   </a>
 );

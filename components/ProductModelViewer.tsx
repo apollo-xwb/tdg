@@ -4,6 +4,7 @@ import { OrbitControls } from '@react-three/drei';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
+import CustomSelect from './CustomSelect';
 
 declare global {
   namespace JSX {
@@ -313,28 +314,28 @@ export default function ProductModelViewer({
         <div className="flex flex-wrap gap-4 p-3 bg-black/30 border-t border-white/5 text-[9px] uppercase tracking-widest">
           <div className="flex items-center gap-2">
             <span className="opacity-60">Metal</span>
-            <select
-              value={metalPreset}
-              onChange={(e) => setMetalPreset(e.target.value)}
-              className="bg-black/50 border border-white/10 px-2 py-1 focus:outline-none focus:border-white/30"
-            >
-              {Object.keys(METAL_PRESETS).map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
+            <div className="min-w-[120px]">
+              <CustomSelect
+                options={Object.keys(METAL_PRESETS).map(k => ({ value: k, label: k }))}
+                value={metalPreset}
+                onChange={setMetalPreset}
+                theme="dark"
+                compact
+              />
+            </div>
           </div>
           {isGlb && (
             <div className="flex items-center gap-2">
               <span className="opacity-60">Stone</span>
-              <select
+            <div className="min-w-[120px]">
+              <CustomSelect
+                options={Object.keys(STONE_PRESETS).map(k => ({ value: k, label: k }))}
                 value={stonePreset}
-                onChange={(e) => setStonePreset(e.target.value)}
-                className="bg-black/50 border border-white/10 px-2 py-1 focus:outline-none focus:border-white/30"
-              >
-                {Object.keys(STONE_PRESETS).map((k) => (
-                  <option key={k} value={k}>{k}</option>
-                ))}
-              </select>
+                onChange={setStonePreset}
+                theme="dark"
+                compact
+              />
+            </div>
             </div>
           )}
         </div>

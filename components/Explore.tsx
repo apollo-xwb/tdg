@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { AppView, JewelleryConfig, Lead } from '../types';
 import { EXCHANGE_RATES } from '../constants';
 import { MessageSquare, X, Gem } from 'lucide-react';
+import CustomSelect from './CustomSelect';
 
 type SortKey = 'newest' | 'type' | 'metal' | 'price';
 
@@ -82,16 +83,20 @@ const Explore: React.FC<ExploreProps> = ({ designs, addLead, setView, currency =
         </div>
         <div className="flex items-center gap-4">
           <span className="text-[9px] uppercase opacity-68">Sort</span>
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as SortKey)}
-            className="bg-transparent border border-current/20 pl-4 pr-8 py-2 text-[10px] uppercase tracking-widest focus:outline-none focus:border-current/40"
-          >
-            <option value="newest">Newest</option>
-            <option value="type">Type</option>
-            <option value="metal">Metal</option>
-            <option value="price">Price</option>
-          </select>
+          <div className="min-w-[140px]">
+            <CustomSelect
+              options={[
+                { value: 'newest', label: 'Newest' },
+                { value: 'type', label: 'Type' },
+                { value: 'metal', label: 'Metal' },
+                { value: 'price', label: 'Price' },
+              ]}
+              value={sortBy}
+              onChange={v => setSortBy(v as SortKey)}
+              theme="dark"
+              compact
+            />
+          </div>
         </div>
       </header>
 

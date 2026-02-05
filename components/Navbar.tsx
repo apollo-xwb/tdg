@@ -4,6 +4,7 @@ import { NAV_ITEMS, EXCHANGE_RATES } from '../constants';
 import { AppView } from '../types';
 import { signOut } from '../lib/supabase';
 import { Moon, Sun, Menu, X, HelpCircle, User as UserIcon, Ruler, ChevronDown, LogOut, PenTool, LogIn, Home, BookOpen, Gem, GraduationCap, LayoutGrid, Compass, FileText, FolderOpen, MessageSquare, Package, Calendar } from 'lucide-react';
+import CustomSelect from './CustomSelect';
 
 interface NavbarProps {
   currentView: AppView;
@@ -133,17 +134,15 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
           )}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm">
             <span className="text-xs">{EXCHANGE_RATES[currency].flag}</span>
-            <select 
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="bg-transparent text-[9px] tracking-tighter uppercase focus:outline-none cursor-pointer"
-            >
-              {Object.keys(EXCHANGE_RATES).map(c => (
-                <option key={c} value={c} className={isDark ? "bg-[#121212]" : "bg-white"}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[72px]">
+              <CustomSelect
+                options={Object.keys(EXCHANGE_RATES).map(c => ({ value: c, label: c }))}
+                value={currency}
+                onChange={v => setCurrency(v)}
+                theme={isDark ? 'dark' : 'light'}
+                compact
+              />
+            </div>
           </div>
 
           <button 

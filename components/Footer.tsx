@@ -25,7 +25,7 @@ const Footer: React.FC<{ theme: 'dark' | 'light'; onNavigate: (v: AppView) => vo
               alt="Logo" 
               className={`h-6 transition-all object-contain ${isDark ? 'logo-invert' : 'logo-no-invert'}`}
             />
-            <p className="text-[9px] uppercase tracking-[0.35em] opacity-72 max-w-xs leading-relaxed">
+            <p className="text-[11px] uppercase tracking-[0.35em] opacity-72 max-w-xs leading-relaxed">
               {DONTPAYRETAIL}. We pioneer it. Custom only. No inventory—under retail. Ethically sourced. Certified.
             </p>
             <div className="flex gap-6 opacity-50">
@@ -41,7 +41,7 @@ const Footer: React.FC<{ theme: 'dark' | 'light'; onNavigate: (v: AppView) => vo
               href={GOOGLE_REVIEW_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 pt-2 text-[10px] uppercase tracking-wider opacity-70 hover:opacity-100 transition-opacity"
+              className="inline-flex items-center gap-1.5 pt-2 text-[12px] uppercase tracking-wider opacity-70 hover:opacity-100 transition-opacity"
               aria-label={`${GOOGLE_RATING} out of 5 stars, ${GOOGLE_REVIEW_COUNT} Google reviews`}
             >
               <span className="font-semibold tabular-nums">{GOOGLE_RATING.toFixed(1)}</span>
@@ -55,20 +55,20 @@ const Footer: React.FC<{ theme: 'dark' | 'light'; onNavigate: (v: AppView) => vo
           </div>
 
           <div>
-            <p className="text-[9px] uppercase tracking-widest font-bold opacity-70 mb-3">Shortcuts</p>
+            <p className="text-[11px] uppercase tracking-widest font-bold opacity-70 mb-3">Shortcuts</p>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {onOpenTour && (
-                <button onClick={onOpenTour} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">How it works</button>
+                <button onClick={onOpenTour} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">How it works</button>
               )}
-              <button onClick={openRingSizeGuide} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all flex items-center gap-1.5">
-                <Ruler size={12} /> Ring size guide
+              <button onClick={openRingSizeGuide} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all flex items-center gap-1.5">
+                <Ruler size={14} /> Ring size guide
               </button>
               {NAV_ITEMS.map(n => (
-                <button key={n.id} onClick={() => onNavigate(n.id as AppView)} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">
+                <button key={n.id} onClick={() => onNavigate(n.id as AppView)} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">
                   {n.label}
                 </button>
               ))}
-              <button onClick={() => onNavigate('Terms')} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Terms</button>
+              <button onClick={() => onNavigate('Terms')} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Terms</button>
             </div>
           </div>
 
@@ -78,21 +78,21 @@ const Footer: React.FC<{ theme: 'dark' | 'light'; onNavigate: (v: AppView) => vo
           </div>
 
           <div className="space-y-3">
-            <p className="text-[9px] uppercase tracking-widest font-bold opacity-70">Visit</p>
+            <p className="text-[11px] uppercase tracking-widest font-bold opacity-70">Visit</p>
             <AddressBlock address={address} />
             <PhoneBlock />
           </div>
         </div>
 
         <div className="pt-8 border-t border-current/10 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="opacity-65 text-[9px] uppercase tracking-[0.4em]">© 2026 THE DIAMOND GUY PRECIOUS METALS</p>
+          <p className="opacity-65 text-[11px] uppercase tracking-[0.4em]">© 2026 THE DIAMOND GUY PRECIOUS METALS</p>
           <div className="flex flex-wrap gap-6 justify-center">
-            <button onClick={openRingSizeGuide} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Ring size guide</button>
-            <button onClick={() => onNavigate('Blog')} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Blog</button>
-            <button onClick={() => onNavigate('Terms')} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Terms & Conditions</button>
-            <button onClick={() => onNavigate('Resources')} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Security & Trust</button>
-            <button onClick={() => onNavigate('Chatbot')} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Contact</button>
-            <button onClick={() => onNavigate('About')} className="text-[9px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Our Story</button>
+            <button onClick={openRingSizeGuide} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Ring size guide</button>
+            <button onClick={() => onNavigate('Blog')} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Blog</button>
+            <button onClick={() => onNavigate('Terms')} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Terms & Conditions</button>
+            <button onClick={() => onNavigate('Resources')} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Security & Trust</button>
+            <button onClick={() => onNavigate('Chatbot')} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Contact</button>
+            <button onClick={() => onNavigate('About')} className="text-[11px] uppercase tracking-widest opacity-65 hover:opacity-100 transition-all">Our Story</button>
           </div>
         </div>
       </div>
