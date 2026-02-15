@@ -10,9 +10,10 @@ interface CustomSelectProps {
   theme?: 'dark' | 'light';
   className?: string;
   compact?: boolean;
+  noBorder?: boolean;
 }
 
-const CustomSelect: React.FC<CustomSelectProps> = ({ options, value, onChange, placeholder = 'Select...', theme = 'dark', className = '', compact }) => {
+const CustomSelect: React.FC<CustomSelectProps> = ({ options, value, onChange, placeholder = 'Select...', theme = 'dark', className = '', compact, noBorder }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -23,12 +24,13 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ options, value, onChange, p
   const isDark = theme === 'dark';
   const selected = options.find(o => o.value === value);
   const pad = compact ? 'px-2 py-1.5' : 'p-3';
+  const borderClass = noBorder ? 'border-0' : (isDark ? 'border border-white/20' : 'border border-gray-200');
   return (
     <div ref={ref} className={`relative ${className}`}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className={`w-full flex items-center justify-between gap-2 border ${pad} text-[10px] font-light text-left transition-colors ${isDark ? 'bg-white/5 border-white/20 text-white hover:bg-white/10' : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-gray-100'}`}
+        className={`w-full flex items-center justify-between gap-2 ${borderClass} ${pad} text-[10px] font-light text-left transition-colors ${isDark ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-gray-50 text-gray-900 hover:bg-gray-100'}`}
       >
         <span className={value ? '' : 'opacity-50'}>{selected ? selected.label : placeholder}</span>
         <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />

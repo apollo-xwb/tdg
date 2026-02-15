@@ -31,6 +31,8 @@ import { loadProductsFromCsv } from './data/productsFromCsv';
 import { mergeCatalog } from './lib/catalogMerge';
 import RingSizeGuideModal from './components/RingSizeGuideModal';
 import PasswordRecoveryModal from './components/PasswordRecoveryModal';
+import DevPricingLab from './components/DevPricingLab';
+import DevPricingProposal from './components/DevPricingProposal';
 
 const defaultState: UserState = {
   diamondIQ: [],
@@ -38,7 +40,9 @@ const defaultState: UserState = {
   leads: [],
   currency: 'ZAR',
   theme: 'dark',
-  builderDraft: {}
+  builderDraft: {},
+  wishlistProductIds: [],
+  compareProductIds: []
 };
 
 const App: React.FC = () => {
@@ -49,7 +53,14 @@ const App: React.FC = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return { ...defaultState, ...parsed, recentDesigns: parsed.recentDesigns ?? [], leads: parsed.leads ?? [] };
+        return {
+          ...defaultState,
+          ...parsed,
+          recentDesigns: parsed.recentDesigns ?? [],
+          leads: parsed.leads ?? [],
+          wishlistProductIds: parsed.wishlistProductIds ?? [],
+          compareProductIds: parsed.compareProductIds ?? [],
+        };
       } catch {
         return { ...defaultState };
       }
@@ -63,6 +74,8 @@ const App: React.FC = () => {
   const [jewelerSettings, setJewelerSettings] = useState<JewelerSettings | null>(null);
   const [showRingSizeGuide, setShowRingSizeGuide] = useState(false);
   const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
+  const [navVisible, setNavVisible] = useState(true);
+  const [devPricingEnabled, setDevPricingEnabled] = useState(false);
 
   const refreshJewelerSettings = useCallback(async () => {
     const s = await fetchJewelerSettings();
@@ -130,12 +143,14 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Persist theme + local-only prefs to localStorage; sync designs/leads to Supabase when they change
+  // Persist theme + local-only prefs; keep a simple theme class on body.
   useEffect(() => {
-    const { recentDesigns, leads, ...rest } = userState;
     localStorage.setItem('diamond_guy_v4', JSON.stringify(userState));
-    document.body.className = userState.theme;
-  }, [userState]);
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove('dark', 'light');
+      document.body.classList.add(userState.theme);
+    }
+  }, [userState.theme]);
 
   const saveDesign = useCallback(async (design: JewelleryConfig) => {
     const withExplore = { ...design, showInExplore: design.showInExplore !== false };
@@ -197,6 +212,35 @@ const App: React.FC = () => {
     setCurrentView('RingBuilder');
   };
 
+  const toggleWishlist = useCallback((productId: string) => {
+    setUserState(prev => {
+      const current = prev.wishlistProductIds ?? [];
+      const exists = current.includes(productId);
+      const next = exists ? current.filter(id => id !== productId) : [...current, productId];
+      return { ...prev, wishlistProductIds: next };
+    });
+  }, []);
+
+  const toggleCompare = useCallback((productId: string) => {
+    setUserState(prev => {
+      const current = prev.compareProductIds ?? [];
+      // If already selected, remove it.
+      if (current.includes(productId)) {
+        return { ...prev, compareProductIds: current.filter(id => id !== productId) };
+      }
+      // Add new; cap at 2 items for comparison.
+      if (current.length >= 2) {
+        const [, second] = current;
+        return { ...prev, compareProductIds: [second, productId] };
+      }
+      return { ...prev, compareProductIds: [...current, productId] };
+    });
+  }, []);
+
+  const clearCompare = useCallback(() => {
+    setUserState(prev => ({ ...prev, compareProductIds: [] }));
+  }, []);
+
   const location = useLocation();
   const navigate = useNavigate();
   const isBlog = location.pathname === '/blog' || location.pathname.startsWith('/blog/');
@@ -206,6 +250,34 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [currentView, location.pathname]);
   const navView: AppView = isBlog ? 'Blog' : (location.pathname.startsWith('/collection') ? 'Collection' : currentView);
+
+  // Dev-only pricing lab access: requires localStorage flag + dev admin email.
+  const isDevAdmin = (() => {
+    if (!sessionUser?.email) return false;
+    const raw = import.meta.env.VITE_DEV_PRICING_ADMINS || '';
+    if (!raw.trim()) return false;
+    const allowed = raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    return allowed.includes(sessionUser.email.toLowerCase());
+  })();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const flag = window.localStorage.getItem('tdg_dev_pricing_enabled');
+      setDevPricingEnabled(flag === '1');
+    } catch {
+      setDevPricingEnabled(false);
+    }
+  }, [location.pathname]);
+
+  // In the jeweler Operations Hub, hide the top nav by default.
+  useEffect(() => {
+    if (currentView === 'JewelerPortal') {
+      setNavVisible(false);
+    } else {
+      setNavVisible(true);
+    }
+  }, [currentView]);
 
   const handleNavTo = (view: AppView) => {
     if (view === 'Blog') navigate('/blog');
@@ -222,27 +294,65 @@ const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-500`}>
-      <Navbar
-        currentView={navView}
-        setView={handleNavTo}
-        theme={userState.theme}
-        toggleTheme={() => setUserState(prev => ({ ...prev, theme: prev.theme === 'dark' ? 'light' : 'dark' }))}
-        currency={userState.currency}
-        setCurrency={(curr) => setUserState(prev => ({ ...prev, currency: curr }))}
-        onOpenTour={() => setTourOpen(true)}
-        onOpenRingSizeGuide={() => setShowRingSizeGuide(true)}
-        sessionUser={sessionUser}
-        logoUrl={logoNavbar}
-        forceDarkNav={currentView === 'Home'}
-      />
+      {navVisible && !location.pathname.startsWith('/dev/pricing') && (
+        <Navbar
+          currentView={navView}
+          setView={handleNavTo}
+          theme={userState.theme}
+          toggleTheme={() => setUserState(prev => ({ ...prev, theme: prev.theme === 'dark' ? 'light' : 'dark' }))}
+          currency={userState.currency}
+          setCurrency={(curr) => setUserState(prev => ({ ...prev, currency: curr }))}
+          onOpenTour={() => setTourOpen(true)}
+          onOpenRingSizeGuide={() => setShowRingSizeGuide(true)}
+          sessionUser={sessionUser}
+          logoUrl={logoNavbar}
+          forceDarkNav={currentView === 'Home'}
+        />
+      )}
       <main className={`flex-grow pb-12 ${mainPt}`}>
         <Routes>
           <Route path="/blog/:slug" element={<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="text-[10px] uppercase tracking-widest opacity-50">Loading…</span></div>}><Blog theme={userState.theme} onNavigateTo={handleNavTo} /></Suspense>} />
           <Route path="/blog" element={<Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="text-[10px] uppercase tracking-widest opacity-50">Loading…</span></div>}><Blog theme={userState.theme} onNavigateTo={handleNavTo} /></Suspense>} />
-          <Route path="/collection" element={<Collection catalogProducts={catalogProducts} addLead={addLead} setView={setCurrentView} currency={userState.currency} theme={userState.theme} />} />
-          <Route path="/collection/:productId" element={<ProductPage catalogProducts={catalogProducts} setView={setCurrentView} currency={userState.currency} theme={userState.theme} />} />
+          <Route
+            path="/collection"
+            element={
+              <Collection
+                catalogProducts={catalogProducts}
+                addLead={addLead}
+                setView={setCurrentView}
+                currency={userState.currency}
+                theme={userState.theme}
+                wishlistProductIds={userState.wishlistProductIds ?? []}
+                compareProductIds={userState.compareProductIds ?? []}
+                onToggleWishlist={toggleWishlist}
+                onToggleCompare={toggleCompare}
+                onClearCompare={clearCompare}
+              />
+            }
+          />
+          <Route
+            path="/collection/:productId"
+            element={
+              <ProductPage
+                catalogProducts={catalogProducts}
+                setView={setCurrentView}
+                currency={userState.currency}
+                theme={userState.theme}
+                wishlistProductIds={userState.wishlistProductIds ?? []}
+                compareProductIds={userState.compareProductIds ?? []}
+                onToggleWishlist={toggleWishlist}
+                onToggleCompare={toggleCompare}
+              />
+            }
+          />
           <Route path="/checkout" element={<Checkout setView={setCurrentView} currency={userState.currency} theme={userState.theme} onOrderPlaced={handleOrderPlaced} />} />
           <Route path="/thank-you" element={<ThankYou setView={setCurrentView} currency={userState.currency} theme={userState.theme} />} />
+          {isDevAdmin && devPricingEnabled && (
+            <>
+              <Route path="/dev/pricing" element={<DevPricingLab />} />
+              <Route path="/dev/pricing/proposal" element={<DevPricingProposal />} />
+            </>
+          )}
           <Route path="*" element={
             <>
               {currentView === 'Home' && <Home theme={userState.theme} onStart={() => setCurrentView('RingBuilder')} onLearn={() => setCurrentView('Learn')} onNavigate={handleNavTo} />}
@@ -251,8 +361,33 @@ const App: React.FC = () => {
               {currentView === 'Explore' && <Explore designs={userState.recentDesigns} addLead={addLead} setView={setCurrentView} currency={userState.currency} />}
               {currentView === 'Resources' && <Resources logoUrl={logoVault} />}
               {currentView === 'Chatbot' && <Chatbot onNavigate={setCurrentView} onLeadSubmit={addLead} theme={userState.theme} />}
-              {currentView === 'Portal' && <Portal userState={userState} setView={setCurrentView} onNudge={handlePartnerNudge} onEditDesign={handleEditDesign} hasAuth={!!supabase} sessionUser={sessionUser} />}
-              {currentView === 'JewelerPortal' && <JewelerPortal userState={userState} onUpdate={updateAllDesigns} onLeadsUpdate={(leads) => { setUserState(prev => ({ ...prev, leads })); upsertLeads(leads); }} catalogProducts={catalogProducts} onCatalogUpdate={setCatalogProducts} emailFlows={emailFlows} onEmailFlowsUpdate={setEmailFlows} jewelerSettings={jewelerSettings} onJewelerSettingsRefresh={refreshJewelerSettings} sessionUser={sessionUser} />}
+              {currentView === 'Portal' && (
+                <Portal
+                  userState={userState}
+                  setView={setCurrentView}
+                  onNudge={handlePartnerNudge}
+                  onEditDesign={handleEditDesign}
+                  hasAuth={!!supabase}
+                  sessionUser={sessionUser}
+                  wishlistProducts={catalogProducts.filter(p => (userState.wishlistProductIds ?? []).includes(p.id))}
+                  onToggleWishlist={toggleWishlist}
+                />
+              )}
+              {currentView === 'JewelerPortal' && (
+                <JewelerPortal
+                  userState={userState}
+                  onUpdate={updateAllDesigns}
+                  onLeadsUpdate={(leads) => { setUserState(prev => ({ ...prev, leads })); upsertLeads(leads); }}
+                  catalogProducts={catalogProducts}
+                  onCatalogUpdate={setCatalogProducts}
+                  emailFlows={emailFlows}
+                  onEmailFlowsUpdate={setEmailFlows}
+                  jewelerSettings={jewelerSettings}
+                  onJewelerSettingsRefresh={refreshJewelerSettings}
+                  sessionUser={sessionUser}
+                  onShowMainNav={() => setNavVisible(true)}
+                />
+              )}
               {currentView === 'Track' && <OrderTracking designs={userState.recentDesigns} sessionUser={sessionUser} hasAuth={!!supabase} currency={userState.currency} onNavigate={handleNavTo} googleReviewUrl={jewelerSettings?.googleReviewUrl ?? undefined} />}
               {currentView === 'Book' && <BookConsultation theme={userState.theme} onNavigate={handleNavTo} openingHours={jewelerSettings?.openingHours ?? undefined} address={jewelerSettings?.address} />}
               {currentView === 'Terms' && <Terms content={jewelerSettings?.termsAndConditions} />}
@@ -266,10 +401,32 @@ const App: React.FC = () => {
         <button onClick={() => { handleNavTo('JewelerPortal'); }} className="text-[6px] uppercase tracking-widest text-current opacity-20">Admin CRM</button>
       </div>
 
-      <Footer theme={userState.theme} onNavigate={handleNavTo} onOpenTour={() => setTourOpen(true)} onOpenRingSizeGuide={() => setShowRingSizeGuide(true)} hours={jewelerSettings?.openingHours ?? undefined} logoUrl={logoFooter} address={jewelerSettings?.address ?? TDG_ADDRESS} />
-      <RingSizeGuideModal isOpen={showRingSizeGuide} onClose={() => setShowRingSizeGuide(false)} theme={userState.theme} />
-      <PasswordRecoveryModal isOpen={showPasswordRecovery} onClose={() => setShowPasswordRecovery(false)} theme={userState.theme} />
-      <FloatingConcierge onNavigate={handleNavTo} theme={userState.theme} />
+      {!location.pathname.startsWith('/dev/pricing') && (
+        <Footer
+          theme={userState.theme}
+          onNavigate={handleNavTo}
+          onOpenTour={() => setTourOpen(true)}
+          onOpenRingSizeGuide={() => setShowRingSizeGuide(true)}
+          hours={jewelerSettings?.openingHours ?? undefined}
+          logoUrl={logoFooter}
+          address={jewelerSettings?.address ?? TDG_ADDRESS}
+        />
+      )}
+      {!location.pathname.startsWith('/dev/pricing') && (
+        <>
+          <RingSizeGuideModal
+            isOpen={showRingSizeGuide}
+            onClose={() => setShowRingSizeGuide(false)}
+            theme={userState.theme}
+          />
+          <PasswordRecoveryModal
+            isOpen={showPasswordRecovery}
+            onClose={() => setShowPasswordRecovery(false)}
+            theme={userState.theme}
+          />
+          <FloatingConcierge onNavigate={handleNavTo} theme={userState.theme} />
+        </>
+      )}
       <TutorialWizard
         isOpen={tourOpen}
         onClose={() => setTourOpen(false)}

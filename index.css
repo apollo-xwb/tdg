@@ -15,3 +15,27 @@
   .text-secondary { opacity: 0.78; }
   .text-muted { opacity: 0.68; }
 }
+
+/* Home page scroll-snap (Crystal-Jewels style) – applied to the
+   internal steps container in Home.tsx, not the whole page. */
+.home-steps {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+.home-steps [data-step-index] {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* Hide native scrollbar for product image thumbnails while still allowing programmatic scroll */
+.thumb-strip {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+}
+
+.thumb-strip::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+

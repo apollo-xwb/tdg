@@ -96,13 +96,20 @@ export const QUALITY_TIERS: Record<string, { label: string, sub: string, color: 
 };
 
 /** Realistic metal gradients for swatches — warm gold, true rose, soft silver */
+// Apple/Tesla-style metal swatch backgrounds: mostly flat with a soft radial highlight
 export const METAL_SWATCH_GRADIENTS: Record<string, string> = {
-  Platinum: 'linear-gradient(145deg, #E8E6E3 0%, #C9C6C2 40%, #B8B5B0 100%)',
-  'White Gold': 'linear-gradient(145deg, #F2F0ED 0%, #D8D5D0 40%, #C4C1BC 100%)',
-  'Yellow Gold': 'linear-gradient(145deg, #D4AF37 0%, #C5A028 40%, #B8860B 100%)',
-  'Rose Gold': 'linear-gradient(145deg, #B76E79 0%, #A85C67 40%, #8B4A52 100%)',
-  Silver: 'linear-gradient(145deg, #C8C6C4 0%, #A8A6A4 40%, #908E8C 100%)',
-  Other: 'linear-gradient(145deg, #D4D2D0 0%, #B8B6B4 40%, #9C9A98 100%)',
+  Platinum:
+    'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.9) 0, transparent 55%), #c7ccd4',
+  'White Gold':
+    'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.95) 0, transparent 55%), #d5d9e0',
+  'Yellow Gold':
+    'radial-gradient(circle at 30% 20%, rgba(255,250,220,0.95) 0, transparent 55%), #d0a640',
+  'Rose Gold':
+    'radial-gradient(circle at 30% 20%, rgba(255,230,230,0.95) 0, transparent 55%), #c27a7a',
+  Silver:
+    'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.9) 0, transparent 55%), #bfc4cc',
+  Other:
+    'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.85) 0, transparent 55%), #b8bcc4',
 };
 
 export const METAL_DATA: Record<string, { price: number, gradient: string, insight: string, img: string }> = {

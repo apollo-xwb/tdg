@@ -7,7 +7,8 @@ import { getJewelerEmail, supabase, signOut, updatePassword, fetchCatalogProduct
 import { calculateQuotePrice } from '../lib/quotePrice';
 import { notifyClientIfRequested } from '../lib/notifyClient';
 import JewelerLogin from './JewelerLogin';
-import { Search, Edit3, Trash2, Phone, FileText, Plus, Save, X, Shield, Share2, Video, CreditCard, LayoutGrid, List, Package, BarChart3, Mail, Copy, Settings, Sparkles, Calendar, Clock, BookOpen, FolderOpen, Upload, LogOut, Lock, Box } from 'lucide-react';
+import { Search, Edit3, Trash2, Phone, FileText, Plus, Save, X, Shield, Share2, Video, CreditCard, LayoutGrid, List, Package, BarChart3, Mail, Copy, Settings, Sparkles, Calendar, Clock, BookOpen, FolderOpen, Upload, LogOut, Lock, Box, Home } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import JewelerCAD from './JewelerCAD';
 import { METAL_DATA, SETTING_DATA, SHAPE_DATA, QUALITY_TIERS, JEWELLERY_TYPES, OPENING_HOURS, DONTPAYRETAIL } from '../constants';
 import { EMAIL_FLOW_TRIGGER_LABELS, DEFAULT_EMAIL_TEMPLATES, VARIABLE_HINT, createFlowFromTemplate } from '../lib/emailFlowTemplates';
@@ -41,6 +42,8 @@ interface Props {
   jewelerSettings?: JewelerSettings | null;
   onJewelerSettingsRefresh?: () => void | Promise<void>;
   sessionUser?: User | null;
+  /** Optional callback from Operations Hub to reveal the main site navbar again */
+  onShowMainNav?: () => void;
 }
 
 const emptyCatalogForm: Partial<CatalogProduct> = {
@@ -164,6 +167,19 @@ const LogoUploadButton: React.FC<{ jewelerId: string; onUpload: (url: string) =>
 
 type CadFile = { id: string; name: string; url: string; createdAt: string };
 
+type BulkLeadRowStatus = 'pending' | 'ok' | 'error';
+
+type BulkLeadRow = {
+  index: number;
+  raw: Record<string, any>;
+  name?: string;
+  email?: string;
+  website?: string;
+  company?: string;
+  icebreaker?: string;
+  status: BulkLeadRowStatus;
+};
+
 const CadLibraryPanel: React.FC<{ jewelerId: string; theme: 'dark' | 'light' }> = ({ jewelerId, theme }) => {
   const [files, setFiles] = useState<CadFile[]>(() => {
     try {
@@ -247,7 +263,7 @@ const CadLibraryPanel: React.FC<{ jewelerId: string; theme: 'dark' | 'light' }> 
   );
 };
 
-const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, catalogProducts = [], onCatalogUpdate, emailFlows = [], onEmailFlowsUpdate, jewelerSettings = null, onJewelerSettingsRefresh, sessionUser = null }) => {
+const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, catalogProducts = [], onCatalogUpdate, emailFlows = [], onEmailFlowsUpdate, jewelerSettings = null, onJewelerSettingsRefresh, sessionUser = null, onShowMainNav }) => {
   const jewelerEmail = getJewelerEmail();
   const isJeweler = jewelerEmail && sessionUser?.email?.toLowerCase() === jewelerEmail.toLowerCase();
   const showLogin = !!jewelerEmail && !isJeweler;
@@ -295,6 +311,12 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
   const [icebreakerLoading, setIcebreakerLoading] = useState(false);
   const [icebreakerError, setIcebreakerError] = useState<string | null>(null);
 
+  // Bulk lead file → AI icebreakers
+  const [bulkLeadRows, setBulkLeadRows] = useState<BulkLeadRow[]>([]);
+  const [bulkLeadHeaders, setBulkLeadHeaders] = useState<string[]>([]);
+  const [bulkIcebreakerLoading, setBulkIcebreakerLoading] = useState(false);
+  const [bulkIcebreakerError, setBulkIcebreakerError] = useState<string | null>(null);
+
   // Image-based design chat (jeweler-side)
   const [designChatImage, setDesignChatImage] = useState<string | null>(null);
   const [designChatQuestion, setDesignChatQuestion] = useState('');
@@ -326,6 +348,10 @@ const JewelerPortal: React.FC<Props> = ({ userState, onUpdate, onLeadsUpdate, ca
   const [passwordError, setPasswordError] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  const bulkTableColumns: string[] = bulkLeadHeaders.length
+    ? bulkLeadHeaders
+    : Array.from(new Set(bulkLeadRows.flatMap(r => Object.keys(r.raw))));
 
   useEffect(() => {
     if (tab === 'Settings') {
@@ -432,6 +458,183 @@ ${content}
     } finally {
       setIcebreakerLoading(false);
     }
+  };
+
+  const extractLeadFields = (raw: Record<string, any>): Omit<BulkLeadRow, 'index' | 'raw' | 'icebreaker'> => {
+    const entries = Object.entries(raw);
+    let name: string | undefined;
+    let email: string | undefined;
+    let website: string | undefined;
+    let company: string | undefined;
+    for (const [key, value] of entries) {
+      const v = String(value ?? '').trim();
+      const k = key.toLowerCase();
+      if (!name && (k === 'name' || k.includes('full name') || (k.includes('contact') && k.includes('name')))) name = v;
+      if (!email && k.includes('email')) email = v;
+      if (!website && (k.includes('website') || k === 'url' || k.includes('domain'))) website = v;
+      if (!company && (k.includes('company') || k.includes('store') || k.includes('business') || k.includes('shop'))) company = v;
+    }
+    return { name, email, website, company };
+  };
+
+  const handleBulkLeadFileSelected = async (file: File) => {
+    setBulkIcebreakerError(null);
+    try {
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      let rows: Record<string, any>[] = [];
+      if (ext === 'csv') {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+        if (!lines.length) throw new Error('Empty CSV file.');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        rows = lines.slice(1).map(line => {
+          const cols = line.split(',');
+          const obj: Record<string, any> = {};
+          headers.forEach((h, idx) => {
+            const cell = (cols[idx] ?? '').trim().replace(/^"|"$/g, '');
+            obj[h] = cell;
+          });
+          return obj;
+        });
+        setBulkLeadHeaders(headers);
+      } else if (ext === 'json') {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed)) throw new Error('JSON must be an array of objects.');
+        rows = parsed as Record<string, any>[];
+        const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r))));
+        setBulkLeadHeaders(headers);
+      } else if (ext === 'xlsx' || ext === 'xls') {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
+        rows = json;
+        const headers = Array.from(new Set(json.flatMap(r => Object.keys(r))));
+        setBulkLeadHeaders(headers);
+      } else {
+        throw new Error('Unsupported file type. Use CSV, JSON, or Excel.');
+      }
+
+      const withFields: BulkLeadRow[] = rows.map((raw, index) => {
+        const fields = extractLeadFields(raw);
+        return { index, raw, ...fields, icebreaker: '', status: 'pending' };
+      });
+      setBulkLeadRows(withFields);
+    } catch (e: any) {
+      console.error('Bulk lead file parse error', e);
+      setBulkLeadRows([]);
+      setBulkLeadHeaders([]);
+      setBulkIcebreakerError(e?.message || 'Could not parse file. Use CSV, JSON, or Excel with simple column headers.');
+    }
+  };
+
+  const handleGenerateBulkIcebreakers = async () => {
+    setBulkIcebreakerError(null);
+    if (!bulkLeadRows.length) {
+      setBulkIcebreakerError('Upload a leads file first.');
+      return;
+    }
+    if (!process.env.API_KEY) {
+      setBulkIcebreakerError('Missing Gemini API key. Please configure API_KEY in your environment.');
+      return;
+    }
+    setBulkIcebreakerLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      for (const row of bulkLeadRows) {
+        // Skip rows that already have a successful icebreaker
+        if (row.status === 'ok' && row.icebreaker && row.icebreaker.trim()) {
+          continue;
+        }
+        try {
+          const prompt = `
+You are writing casual, warm cold-email openers for a SaaS tool aimed at independent jewellers.
+
+You will get one business at a time as a JSON row from my CRM (name, store, website, location, notes, etc.).
+
+For this business, generate ONE icebreaker opener using this structure and tone:
+
+Hey {firstName},
+
+Love that {businessName} has been {specific fact from description, e.g. family-owned for 75 years / specializing in lab-grown diamonds / doing custom CAD designs} — also a fan of how you {another specific detail, e.g. focus on ethical sourcing / offer in-house repairs / build client trust with GIA certs}.
+
+I hope you’ll forgive me, but I creeped your site quite a bit, and it’s clear that {implied core value, e.g. making every piece meaningful / keeping things honest and personal / putting craftsmanship first} really matters to you guys (or at least that’s the vibe from your emphasis on {fourth detail, e.g. bespoke work / family legacy / conflict-free stones}).
+
+Then add a 1-sentence teaser about the tool: something like "I built a simple AI tool to handle the repetitive stuff (inventory, custom orders, client notes) so you can focus on the jewellery and people — cheap to run and seems to fit independents like you."
+
+Keep it 4–7 sentences max, friendly, slightly self-deprecating, no hard sell.
+
+Business data (JSON):
+${JSON.stringify(row.raw, null, 2)}
+
+If the row contains separate fields for first name and company, use them. Otherwise, make a best guess from whatever is available (name, company, website, etc.).
+
+Output ONLY the full opener text for this one business. No numbering, no labels, no extra commentary.
+          `.trim();
+          const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: prompt,
+          });
+          const text = (response as any).text?.trim?.() || (response as any).candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('\n') || '';
+          const ice = text || '';
+          // Update this row in place so the table populates in real time
+          setBulkLeadRows(prev => {
+            const next = [...prev];
+            const idx = next.findIndex(r => r.index === row.index);
+            if (idx !== -1) {
+              next[idx] = { ...next[idx], icebreaker: ice, status: ice ? 'ok' as BulkLeadRowStatus : 'error' };
+            }
+            return next;
+          });
+        } catch (inner) {
+          console.error('Bulk icebreaker error for row', row.index, inner);
+          setBulkLeadRows(prev => {
+            const next = [...prev];
+            const idx = next.findIndex(r => r.index === row.index);
+            if (idx !== -1) {
+              next[idx] = { ...next[idx], icebreaker: '', status: 'error' };
+            }
+            return next;
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Gemini bulk icebreaker error', e);
+      setBulkIcebreakerError('Something went wrong while generating bulk icebreakers. Please try again.');
+    } finally {
+      setBulkIcebreakerLoading(false);
+    }
+  };
+
+  const handleDownloadBulkCsv = () => {
+    if (!bulkLeadRows.length) return;
+    const headers = bulkLeadHeaders.length
+      ? bulkLeadHeaders
+      : Array.from(new Set(bulkLeadRows.flatMap(r => Object.keys(r.raw))));
+    const allHeaders = [...headers, 'Icebreaker'];
+    const escapeCell = (v: any) => {
+      const s = String(v ?? '');
+      if (s.includes('"') || s.includes(',') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const lines: string[] = [];
+    lines.push(allHeaders.map(h => escapeCell(h)).join(','));
+    bulkLeadRows.forEach(row => {
+      const base = headers.map(h => escapeCell(row.raw[h]));
+      base.push(escapeCell(row.icebreaker ?? ''));
+      lines.push(base.join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lead-icebreakers.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleDesignImageChat = async () => {
@@ -869,6 +1072,16 @@ For questions, please contact our concierge.`;
             <h1 className="text-5xl font-thin tracking-tighter uppercase">Operations Hub</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {onShowMainNav && (
+              <button
+                type="button"
+                onClick={onShowMainNav}
+                className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 hover:bg-white/5 transition-all"
+                title="Show top navigation"
+              >
+                <Home size={14} /> Show site nav
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setNavOpen(true)}
@@ -1605,6 +1818,96 @@ For questions, please contact our concierge.`;
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className="glass border border-white/10 rounded-sm p-6 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <h3 className="text-[11px] uppercase tracking-widest font-bold flex items-center gap-2">
+                    <Sparkles size={14} /> Bulk Icebreakers from Leads File
+                  </h3>
+                  <p className="text-[9px] uppercase opacity-68 mt-1">
+                    Upload a CSV / JSON / Excel list of leads and generate personalization bullets in the same order, exportable as CSV.
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 text-[9px] uppercase tracking-widest cursor-pointer hover:bg-white/5">
+                  Upload leads file
+                  <input
+                    type="file"
+                    accept=".csv,.json,.xlsx,.xls"
+                    className="hidden"
+                    onChange={async e => {
+                      const f = e.target.files?.[0];
+                      if (f) await handleBulkLeadFileSelected(f);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+              {bulkIcebreakerError && (
+                <p className="text-[9px] text-red-400/80">{bulkIcebreakerError}</p>
+              )}
+              {bulkLeadRows.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-[9px] uppercase opacity-68">
+                      {bulkLeadRows.length} leads loaded. We&apos;ll preserve this exact order in the CSV export.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleGenerateBulkIcebreakers}
+                      disabled={bulkIcebreakerLoading}
+                      className="px-4 py-2 bg-white text-black text-[9px] uppercase tracking-widest font-bold hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {bulkIcebreakerLoading ? 'Generating…' : 'Generate for all leads'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadBulkCsv}
+                      disabled={!bulkLeadRows.some(r => r.icebreaker && r.icebreaker.trim())}
+                      className="px-4 py-2 border border-white/30 text-[9px] uppercase tracking-widest hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Download CSV
+                    </button>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto border border-white/10 rounded-sm">
+                    <table className="w-full text-[10px]">
+                      <thead className="bg-white/5">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold">#</th>
+                          {bulkTableColumns.map(col => (
+                            <th key={col} className="px-3 py-2 text-left font-semibold">
+                              {col}
+                            </th>
+                          ))}
+                          <th className="px-3 py-2 text-left font-semibold">Icebreaker</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkLeadRows.map(row => (
+                          <tr key={row.index} className="border-t border-white/5 align-top">
+                            <td className="px-3 py-2 whitespace-nowrap opacity-70">{row.index + 1}</td>
+                            {bulkTableColumns.map(col => (
+                              <td key={col} className="px-3 py-2 whitespace-nowrap">
+                                {String(row.raw[col] ?? '').trim() || '—'}
+                              </td>
+                            ))}
+                            <td className="px-3 py-2">
+                              <div className="max-h-24 overflow-y-auto whitespace-pre-wrap opacity-80">
+                                {row.icebreaker && row.icebreaker.trim()
+                                  ? row.icebreaker
+                                  : row.status === 'error'
+                                    ? <span className="opacity-60 text-red-300">Error</span>
+                                    : <span className="opacity-40">Pending</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
 
             <EmailFlowsTab

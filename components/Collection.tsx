@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppView, CatalogProduct, CatalogProductVariant, Lead } from '../types';
 import { EXCHANGE_RATES, getMetalSwatchGradient, groupMetalsByType, parseMetalLabel, SETTING_DATA, SHAPE_DATA } from '../constants';
-import { MessageSquare, X, ShoppingBag, SlidersHorizontal } from 'lucide-react';
+import { MessageSquare, X, ShoppingBag, SlidersHorizontal, Heart, BarChart3 } from 'lucide-react';
 import ProductModelViewer from './ProductModelViewer';
 import CustomSelect from './CustomSelect';
 import Showcase from './Showcase';
@@ -15,6 +15,11 @@ interface CollectionProps {
   setView: (view: AppView) => void;
   currency?: string;
   theme?: 'dark' | 'light';
+  wishlistProductIds: string[];
+  compareProductIds: string[];
+  onToggleWishlist: (productId: string) => void;
+  onToggleCompare: (productId: string) => void;
+  onClearCompare: () => void;
 }
 
 /** Get effective price for sorting (min of variants or base) */
@@ -52,7 +57,18 @@ function getProductSetting(p: CatalogProduct): string | null {
   return p.settingStyle ?? null;
 }
 
-const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setView, currency = 'ZAR', theme = 'dark' }) => {
+const Collection: React.FC<CollectionProps> = ({
+  catalogProducts,
+  addLead,
+  setView,
+  currency = 'ZAR',
+  theme = 'dark',
+  wishlistProductIds,
+  compareProductIds,
+  onToggleWishlist,
+  onToggleCompare,
+  onClearCompare,
+}) => {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState<SortKey>('newest');
   const [filterShape, setFilterShape] = useState<string | null>(null);
@@ -69,6 +85,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
   const [enquiryPhone, setEnquiryPhone] = useState('');
   const [enquiryMessage, setEnquiryMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'collection' | 'showcase'>('collection');
+  const [page, setPage] = useState(1);
 
   const active = useMemo(() => catalogProducts.filter(p => p.isActive !== false), [catalogProducts]);
 
@@ -140,6 +157,23 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
 
   const hasActiveFilters = filterShape || filterMetal || filterSetting || filterPriceMin != null || filterPriceMax != null;
 
+  const compareProducts = useMemo(
+    () => active.filter(p => compareProductIds.includes(p.id)),
+    [active, compareProductIds],
+  );
+
+  const pageSize = 9;
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paged = sorted.slice(startIndex, endIndex);
+
+  // Reset to first page when filters or sort change
+  useEffect(() => {
+    setPage(1);
+  }, [sortBy, filterShape, filterMetal, filterSetting, filterPriceMin, filterPriceMax]);
+
   const handleEnquireSubmit = () => {
     if (!enquiryProduct) return;
     const variant = getEffectiveVariant(enquiryProduct, enquiryVariantIndex);
@@ -169,7 +203,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
   const rate = EXCHANGE_RATES[currency]?.rate ?? 1;
 
   return (
-    <div className="w-full px-6 lg:px-8 py-12 animate-fadeIn">
+    <div className="w-full px-6 lg:px-8 pt-24 pb-12 animate-fadeIn">
       <div className={activeTab === 'collection' ? 'max-w-6xl mx-auto space-y-12' : 'space-y-10'}>
       <header className={`flex flex-col gap-6 pb-10 ${activeTab === 'collection' ? 'border-b border-current/10' : ''}`}>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -236,6 +270,77 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
         </div>
       </header>
 
+      {activeTab === 'collection' && compareProducts.length >= 2 && (
+        <section className="mt-4 mb-8 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] font-bold">
+              <BarChart3 size={14} />
+              <span>Comparing 2 rings</span>
+            </div>
+            <button
+              type="button"
+              onClick={onClearCompare}
+              className="text-[9px] uppercase tracking-[0.25em] opacity-70 hover:opacity-100"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-[11px]">
+            {compareProducts.slice(0, 2).map(cp => {
+              const variantIdx = selectedVariantByProduct[cp.id] ?? 0;
+              const variant = getEffectiveVariant(cp, variantIdx);
+              const price = variant ? variant.priceZAR : (cp.priceZAR ?? 0);
+              const thumb = variant?.imageUrl || cp.imageUrls?.[0];
+              const shapes = getProductShapes(cp);
+              const setting = getProductSetting(cp);
+              return (
+                <div
+                  key={cp.id}
+                  className="border border-current/10 rounded-sm p-4 space-y-3"
+                >
+                  <div className="flex items-center gap-3">
+                    {thumb && (
+                      <img
+                        src={thumb}
+                        alt={cp.title}
+                        className="w-14 h-14 rounded-sm object-cover border border-current/20"
+                      />
+                    )}
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] opacity-70">
+                        {cp.type || 'Engagement Ring'}
+                      </p>
+                      <p className="text-sm font-semibold tracking-wide">{cp.title}</p>
+                    </div>
+                  </div>
+                  <dl className="space-y-1">
+                    <CompareRow label="Metal" value={variant?.metal || cp.metal || '—'} />
+                    <CompareRow label="Shape" value={variant?.shape || shapes[0] || '—'} />
+                    <CompareRow label="Setting" value={setting || '—'} />
+                    <CompareRow label="Stone" value={cp.stoneCategory || '—'} />
+                    <CompareRow
+                      label="Carat"
+                      value={cp.carat ? `${cp.carat.toFixed(2)} ct` : '—'}
+                    />
+                    <CompareRow
+                      label="Price (ZAR)"
+                      value={price ? `ZAR ${price.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                    />
+                  </dl>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/collection/${cp.id}`)}
+                    className="mt-3 text-[9px] uppercase tracking-[0.25em] underline underline-offset-4 opacity-80 hover:opacity-100"
+                  >
+                    View details
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {activeTab === 'collection' && showFilters && (
         <div className={`p-6 rounded-sm border ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'} space-y-6 animate-fadeIn`}>
           <h3 className="text-[10px] uppercase tracking-widest font-bold">Filter by</h3>
@@ -279,11 +384,15 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
             {allMetalTypes.length > 0 && (
               <div>
                 <label className="block text-[11px] uppercase opacity-70 mb-2">Metal</label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
                   <button
                     onClick={() => setFilterMetal(null)}
-                    className={`p-2 rounded-sm border text-[11px] uppercase tracking-wider transition-all ${
-                      !filterMetal ? 'border-emerald-500/50 bg-emerald-500/10 font-bold' : theme === 'dark' ? 'border-white/20 hover:bg-white/5' : 'border-gray-300 hover:bg-gray-100'
+                    className={`px-3 py-2 rounded-full border text-[10px] uppercase tracking-[0.25em] transition-all ${
+                      !filterMetal
+                        ? 'border-emerald-500/60 bg-emerald-500/10 font-semibold text-emerald-200'
+                        : theme === 'dark'
+                          ? 'border-white/20 text-white/70 hover:bg-white/5'
+                          : 'border-gray-300 text-gray-800 hover:bg-gray-100'
                     }`}
                   >
                     All
@@ -294,13 +403,20 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                       <button
                         key={metal}
                         onClick={() => setFilterMetal(isSelected ? null : metal)}
-                        className={`w-9 h-9 rounded-full border-2 transition-all touch-manipulation ${
-                          isSelected ? 'border-emerald-500/50 ring-2 ring-emerald-500/30 scale-110' : 'border-transparent opacity-80 hover:opacity-100'
+                        className={`relative flex items-center justify-center w-9 h-9 rounded-full transition-all touch-manipulation shadow-[0_4px_12px_rgba(0,0,0,0.45)] focus:outline-none ${
+                          isSelected
+                            ? 'ring-2 ring-emerald-300 ring-offset-2 ring-offset-[#050505] scale-110'
+                            : 'opacity-80 hover:opacity-100 hover:scale-105'
                         }`}
-                        style={{ background: getMetalSwatchGradient(metal) }}
                         title={metal}
                         aria-label={metal}
-                      />
+                        aria-pressed={isSelected}
+                      >
+                        <span
+                          className="w-8 h-8 rounded-full shadow-inner shadow-black/30"
+                          style={{ background: getMetalSwatchGradient(metal) }}
+                        />
+                      </button>
                     );
                   })}
                 </div>
@@ -376,7 +492,7 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
             </div>
           </div>
           <p className="text-[11px] opacity-60">
-            Showing {sorted.length} of {active.length} designs
+            Showing {sorted.length === 0 ? 0 : startIndex + 1}–{Math.min(endIndex, sorted.length)} of {active.length} designs
           </p>
         </div>
       )}
@@ -385,8 +501,9 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
         sorted.length === 0 ? (
           <p className="text-center py-24 opacity-60 uppercase tracking-widest text-[10px]">No designs in the collection yet. Check back soon.</p>
         ) : (
+        <>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {sorted.map(p => {
+          {paged.map(p => {
             const variantIdx = selectedVariantByProduct[p.id] ?? 0;
             const variant = getEffectiveVariant(p, variantIdx);
             const displayPrice = variant ? variant.priceZAR : (p.priceZAR ?? 0);
@@ -399,6 +516,9 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
             const currentKarat = variant?.metal ? parseMetalLabel(variant.metal).karat : '';
             const activeGroup = metalGroups.find(g => g.metalType === currentMetalType);
             const showKaratPills = activeGroup && activeGroup.karats.length > 1;
+
+            const inWishlist = wishlistProductIds.includes(p.id);
+            const inCompare = compareProductIds.includes(p.id);
 
             const selectVariantByMetal = (fullMetal: string) => {
               const idx = p.variants!.findIndex(v => v.metal === fullMetal && (variant?.shape ? v.shape === variant.shape : true));
@@ -425,6 +545,33 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                       className="w-full h-full object-cover"
                     />
                   )}
+                  {/* Wishlist / compare controls */}
+                  <div className="absolute top-3 right-3 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); onToggleWishlist(p.id); }}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] border transition-all ${
+                        inWishlist
+                          ? 'bg-emerald-500 text-black border-emerald-400 shadow-[0_0_0_1px_rgba(16,185,129,0.6)]'
+                          : 'bg-black/60 text-white/80 border-white/20 hover:bg-black/80'
+                      }`}
+                      title={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                    >
+                      <Heart size={14} className={inWishlist ? 'fill-black' : ''} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); onToggleCompare(p.id); }}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] border transition-all ${
+                        inCompare
+                          ? 'bg-white text-black border-white shadow-[0_0_0_1px_rgba(255,255,255,0.5)]'
+                          : 'bg-black/60 text-white/80 border-white/20 hover:bg-black/80'
+                      }`}
+                      title={inCompare ? 'Remove from compare' : 'Add to compare'}
+                    >
+                      <BarChart3 size={14} />
+                    </button>
+                  </div>
                 </div>
                 <div className="p-6 flex flex-col flex-grow" onClick={e => e.stopPropagation()}>
                   <h3 className="text-[11px] uppercase tracking-widest font-bold">{p.title}</h3>
@@ -440,14 +587,20 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                               key={group.metalType}
                               type="button"
                               onClick={handleClick}
-                              className={`flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/50 touch-manipulation ${
-                                isSelected ? 'border-current scale-110 ring-2 ring-emerald-500/30' : 'border-transparent opacity-80 hover:opacity-100 hover:scale-105'
+                              className={`relative flex items-center justify-center flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full transition-all focus:outline-none touch-manipulation shadow-[0_4px_12px_rgba(0,0,0,0.45)] ${
+                                isSelected
+                                  ? 'ring-2 ring-emerald-300 ring-offset-2 ring-offset-black scale-110'
+                                  : 'opacity-80 hover:opacity-100 hover:scale-105'
                               }`}
-                              style={{ background: getMetalSwatchGradient(group.metalType) }}
                               title={group.metalType}
                               aria-pressed={isSelected}
                               aria-label={`Select ${group.metalType}`}
-                            />
+                            >
+                              <span
+                                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full shadow-inner shadow-black/30"
+                                style={{ background: getMetalSwatchGradient(group.metalType) }}
+                              />
+                            </button>
                           );
                         })}
                       </div>
@@ -515,11 +668,45 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
             );
           })}
         </div>
+        {totalPages > 1 && (
+          <div className="mt-10 flex items-center justify-center gap-4 text-[10px] uppercase tracking-[0.25em]">
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className={`px-3 py-1.5 rounded-full border ${
+                currentPage === 1
+                  ? 'opacity-30 cursor-not-allowed border-current/10'
+                  : 'border-current/30 hover:bg-white/5'
+              }`}
+            >
+              Prev
+            </button>
+            <span className="opacity-70">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className={`px-3 py-1.5 rounded-full border ${
+                currentPage === totalPages
+                  ? 'opacity-30 cursor-not-allowed border-current/10'
+                  : 'border-current/30 hover:bg-white/5'
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        )}
+        </>
         )
       ) : (
         <Showcase theme={theme} />
       )}
       </div>
+
+      {/* (Compare section now rendered near the top under the header) */}
 
       {activeTab === 'collection' && enquiryProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 animate-fadeIn" onClick={() => setEnquiryProduct(null)}>
@@ -557,14 +744,20 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
                               key={group.metalType}
                               type="button"
                               onClick={() => selectEnquiryVariant(group.fullMetals[0] ?? '')}
-                              className={`flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/50 touch-manipulation ${
-                                isSelected ? 'border-white scale-110 ring-2 ring-emerald-500/30' : 'border-transparent opacity-80 hover:opacity-100 hover:scale-105'
+                              className={`relative flex items-center justify-center flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full transition-all focus:outline-none touch-manipulation shadow-[0_4px_12px_rgba(0,0,0,0.45)] ${
+                                isSelected
+                                  ? 'ring-2 ring-emerald-300 ring-offset-2 ring-offset-black scale-110'
+                                  : 'opacity-80 hover:opacity-100 hover:scale-105'
                               }`}
-                              style={{ background: getMetalSwatchGradient(group.metalType) }}
                               title={group.metalType}
                               aria-pressed={isSelected}
                               aria-label={`Select ${group.metalType}`}
-                            />
+                            >
+                              <span
+                                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full shadow-inner shadow-black/30"
+                                style={{ background: getMetalSwatchGradient(group.metalType) }}
+                              />
+                            </button>
                           );
                         })}
                       </div>
@@ -629,5 +822,12 @@ const Collection: React.FC<CollectionProps> = ({ catalogProducts, addLead, setVi
     </div>
   );
 };
+
+const CompareRow = ({ label, value }: { label: string; value: string }) => (
+  <div className="flex justify-between items-center gap-4">
+    <span className="opacity-60">{label}</span>
+    <span className="font-semibold text-right">{value}</span>
+  </div>
+);
 
 export default Collection;

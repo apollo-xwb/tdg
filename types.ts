@@ -151,6 +151,10 @@ export interface UserState {
   currency: 'ZAR' | 'USD' | 'GBP' | 'EUR' | 'AUD' | 'CAD';
   theme: 'dark' | 'light';
   builderDraft?: Partial<JewelleryConfig>;
+  /** Client wishlist of catalog products (by product id). Shown in their vault. */
+  wishlistProductIds?: string[];
+  /** Last two products the client chose to compare (by product id). */
+  compareProductIds?: string[];
 }
 
 export type EmailFlowTriggerType = 'quote_approved' | 'status_update' | 'reminder' | 'promo' | 'order_placed' | 'custom';

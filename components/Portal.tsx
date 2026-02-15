@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { UserState, AppView, OrderStatus, JewelleryConfig } from '../types';
+import { UserState, AppView, OrderStatus, JewelleryConfig, CatalogProduct } from '../types';
 import { EXCHANGE_RATES } from '../constants';
 import { Heart, Box, MessageSquare, FileText, Video, CreditCard, ChevronDown, ChevronUp, Download, Share2, Edit3, Send, Lock, LogOut } from 'lucide-react';
 import AuthGate from './AuthGate';
@@ -20,9 +20,20 @@ interface PortalProps {
   onEditDesign: (design: JewelleryConfig) => void;
   hasAuth?: boolean;
   sessionUser?: User | null;
+  wishlistProducts?: CatalogProduct[];
+  onToggleWishlist?: (productId: string) => void;
 }
 
-const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesign, hasAuth = false, sessionUser = null }) => {
+const Portal: React.FC<PortalProps> = ({
+  userState,
+  setView,
+  onNudge,
+  onEditDesign,
+  hasAuth = false,
+  sessionUser = null,
+  wishlistProducts = [],
+  onToggleWishlist,
+}) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (hasAuth && !sessionUser) {
@@ -31,8 +42,10 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 border-current/20 mb-8">
           <Lock size={28} className="opacity-60" />
         </div>
-        <h2 className="text-3xl font-thin tracking-tighter uppercase mb-4">Sign in to view your Vault</h2>
-        <p className="text-[10px] uppercase tracking-widest opacity-68 mb-10">Your saved proposals and crafting status are stored securely. Sign in to continue.</p>
+        <h2 className="text-3xl font-thin tracking-tighter uppercase mb-4">Sign in with Google to view your Vault</h2>
+        <p className="text-[10px] uppercase tracking-widest opacity-68 mb-10">
+          Your saved proposals and crafting status are secured behind Google sign‑in via Supabase. Tap below to open the concierge and continue with Google.
+        </p>
         <button onClick={() => setView('Chatbot')} className="px-8 py-4 bg-white text-black text-[10px] uppercase tracking-widest font-bold hover:bg-gray-200">
           Go to Concierge to sign in
         </button>
@@ -165,6 +178,75 @@ const Portal: React.FC<PortalProps> = ({ userState, setView, onNudge, onEditDesi
            {!userState.recentDesigns.length && <p className="opacity-20 text-[10px] uppercase tracking-widest italic text-center py-20">No active crafting projects.</p>}
            {userState.recentDesigns.find(d => d.isApproved) && <Active design={userState.recentDesigns.find(d => d.isApproved)!} setView={setView} />}
         </div>
+      </section>
+
+      <section className="mt-20 border-t border-current/10 pt-16 space-y-8">
+        <h2 className="text-[11px] uppercase tracking-[0.6em] opacity-78 flex items-center gap-4 font-bold">
+          <Heart size={16} /> Wishlist from Collection
+        </h2>
+        {(!wishlistProducts || wishlistProducts.length === 0) ? (
+          <p className="text-[10px] uppercase tracking-widest opacity-50">
+            No items in your wishlist yet. Tap the heart on any ring in the Collection to save it here.
+          </p>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {wishlistProducts.map(p => {
+              const rate = EXCHANGE_RATES[userState.currency]?.rate || 1;
+              const displayImage = p.imageUrls?.[0];
+              const price = p.priceZAR ?? 0;
+              return (
+                <div
+                  key={p.id}
+                  className="glass rounded-sm border border-current/10 overflow-hidden flex flex-col"
+                >
+                  <div className="aspect-square bg-black/30 relative">
+                    {displayImage && (
+                      <img
+                        src={displayImage}
+                        alt={p.title}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    {onToggleWishlist && (
+                      <button
+                        type="button"
+                        onClick={() => onToggleWishlist(p.id)}
+                        className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/70 border border-white/20 flex items-center justify-center"
+                        title="Remove from wishlist"
+                      >
+                        <Heart size={14} className="fill-emerald-400 text-emerald-400" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="p-4 space-y-2 flex-1 flex flex-col">
+                    <p className="text-[9px] uppercase tracking-[0.35em] opacity-70">
+                      {p.type || 'Engagement Ring'}
+                    </p>
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.18em]">
+                      {p.title}
+                    </p>
+                    <p className="text-[11px] opacity-70 line-clamp-2">
+                      {p.description}
+                    </p>
+                    <p className="text-sm mt-2">
+                      {userState.currency}{' '}
+                      {Math.round((price ?? 0) / (rate || 1)).toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setView('Collection')}
+                      className="mt-auto text-[9px] uppercase tracking-[0.25em] underline underline-offset-4 opacity-75 hover:opacity-100"
+                    >
+                      View in Collection
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );

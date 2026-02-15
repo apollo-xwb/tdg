@@ -37,6 +37,8 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoSrc = logoUrl || DEFAULT_LOGO;
+  const [logoTapCount, setLogoTapCount] = useState(0);
+  const logoTapTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const onOutside = (e: MouseEvent) => { if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false); };
@@ -51,10 +53,37 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
 
   return (
     <>
-      <nav className={`fixed top-0 left-0 right-0 z-50 px-6 xl:px-8 py-5 flex items-center justify-between glass transition-all ${isDark ? 'text-white' : 'text-black'} ${isMenuOpen ? 'xl:flex hidden' : ''}`}>
+      <nav
+        className={`fixed top-0 left-0 right-0 z-50 px-6 xl:px-8 py-5 flex items-center justify-between transition-all ${
+          isDark
+            ? 'text-white bg-black/90 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)]'
+            : 'text-white bg-black/40 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.3)]'
+        } ${isMenuOpen ? 'xl:flex hidden' : ''}`}
+      >
         <div 
           className="flex items-center gap-4 cursor-pointer"
-          onClick={() => handleNav('Home')}
+          onClick={() => {
+            handleNav('Home');
+            // Easter egg: tap logo 7x in quick succession to unlock dev pricing lab.
+            if (typeof window !== 'undefined') {
+              setLogoTapCount((prev) => {
+                const next = prev + 1;
+                if (logoTapTimeoutRef.current) {
+                  window.clearTimeout(logoTapTimeoutRef.current);
+                }
+                logoTapTimeoutRef.current = window.setTimeout(() => {
+                  setLogoTapCount(0);
+                  logoTapTimeoutRef.current = null;
+                }, 4000);
+                if (next >= 7) {
+                  window.localStorage.setItem('tdg_dev_pricing_enabled', '1');
+                  // eslint-disable-next-line no-console
+                  console.info('[TDG] Dev pricing lab unlocked for this browser session.');
+                }
+                return next;
+              });
+            }
+          }}
         >
           <img 
             src={logoSrc} 
@@ -64,8 +93,11 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
         </div>
 
         {/* Desktop Navigation — only from 1280px; hamburger below that (including 1024px) */}
-        <div className="hidden xl:flex items-center gap-10">
-          {NAV_ITEMS.map((item) => (
+        <div className="hidden xl:flex items-center gap-8">
+          {/* Primary links kept inline to avoid overflow */}
+          {NAV_ITEMS.filter((item) =>
+            ['Home', 'RingBuilder', 'Collection', 'Explore'].includes(item.id) && !(item.id === 'Home' && currentView === 'Home')
+          ).map((item) => (
             <button
               key={item.id}
               onClick={() => handleNav(item.id as AppView)}
@@ -76,6 +108,65 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
               {item.label}
             </button>
           ))}
+
+          {/* Group the rest into compact dropdown clusters to prevent overlap */}
+          <div className="flex items-center gap-4">
+            {/* Story + Education cluster */}
+            <div className="relative group">
+              <button
+                type="button"
+                className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] opacity-80 hover:opacity-100 transition-all"
+              >
+                <BookOpen size={14} /> Story & Learn
+                <ChevronDown size={12} className="transition-transform group-hover:rotate-180" />
+              </button>
+              <div
+                className={`invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all duration-150 absolute right-0 mt-2 min-w-[200px] rounded-xl border ${
+                  isDark ? 'bg-[#111]/95 border-white/10 text-white' : 'bg-white border-black/10 text-black'
+                } shadow-2xl backdrop-blur-sm py-2`}
+              >
+                {NAV_ITEMS.filter((i) => ['About', 'Learn', 'Blog', 'Resources'].includes(i.id)).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNav(item.id as AppView)}
+                    className={`w-full text-left px-4 py-2.5 text-[10px] uppercase tracking-[0.25em] hover:bg-current/5 ${
+                      currentView === item.id ? 'font-semibold' : ''
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Visit & Client Tools cluster */}
+            <div className="relative group">
+              <button
+                type="button"
+                className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] opacity-80 hover:opacity-100 transition-all"
+              >
+                <Gem size={14} /> Client Tools
+                <ChevronDown size={12} className="transition-transform group-hover:rotate-180" />
+              </button>
+              <div
+                className={`invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all duration-150 absolute right-0 mt-2 min-w-[220px] rounded-xl border ${
+                  isDark ? 'bg-[#111]/95 border-white/10 text-white' : 'bg-white border-black/10 text-black'
+                } shadow-2xl backdrop-blur-sm py-2`}
+              >
+                {NAV_ITEMS.filter((i) => ['Book', 'Track', 'Chatbot', 'Portal'].includes(i.id)).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNav(item.id as AppView)}
+                    className={`w-full text-left px-4 py-2.5 text-[10px] uppercase tracking-[0.25em] hover:bg-current/5 ${
+                      currentView === item.id ? 'font-semibold' : ''
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-4">
@@ -141,6 +232,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
                 onChange={v => setCurrency(v)}
                 theme={isDark ? 'dark' : 'light'}
                 compact
+                noBorder
               />
             </div>
           </div>
@@ -201,7 +293,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, setView, theme, toggleThem
                 <nav aria-label="Browse">
                   <p className="text-[9px] uppercase tracking-[0.35em] opacity-50 mb-3 font-medium">Browse</p>
                   <div className="grid grid-cols-2 gap-3">
-                    {NAV_ITEMS.filter((i) => ['Home', 'About', 'RingBuilder', 'Learn', 'Collection', 'Explore', 'Blog'].includes(i.id)).map((item) => {
+                    {NAV_ITEMS.filter((i) => ['Home', 'About', 'RingBuilder', 'Learn', 'Collection', 'Explore', 'Blog'].includes(i.id) && !(i.id === 'Home' && currentView === 'Home')).map((item) => {
                       const Icon = { Home, About: BookOpen, RingBuilder: PenTool, Learn: GraduationCap, Collection: LayoutGrid, Explore: Compass, Blog: FileText }[item.id] ?? Home;
                       return (
                         <button
